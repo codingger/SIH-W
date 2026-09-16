@@ -3,11 +3,15 @@ import cors from "cors";
 import bodyParser from "body-parser";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
+import multer from "multer";
 
 dotenv.config();
 
 const app = express();
 const port = 3000;
+const upload = multer({
+    storage: multer.memoryStorage()
+});
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
@@ -56,7 +60,7 @@ app.post("/users", async (req, res) => {
     }
 });
 
-app.post("/challenges", async (req, res) => {
+app.post("/challenges", upload.array("files"), async (req, res) => {
     try {
         const {
             title,
@@ -69,8 +73,9 @@ app.post("/challenges", async (req, res) => {
         } = req.body;
 
         console.log("Received:", req.body);
+        console.log("Files:", req.files);
 
-        const { data, error } = await supabase
+        const { data: challenge, error } = await supabase
             .from("challenges")
             .insert({
                 title: title,
@@ -81,21 +86,57 @@ app.post("/challenges", async (req, res) => {
                 affected_people: affected_people,
                 additional_info: additional_info
             })
-            .select();
-
-        console.log("Data:", data);
-        console.log("Error:", error);
+            .select()
+            .single();
 
         if (error) {
+            console.log("Challenge Error:", error);
             return res.status(500).json(error);
         }
 
-        res.status(200).json(data);
+        for (let i = 0; i < req.files.length; i++) {
 
-    } catch (error) {
-        console.log("SERVER ERROR:", error);
-        res.status(500).json(error);
+            const file = req.files[i];
+
+            const filePath =
+                `${challenge.id}/${Date.now()}-${i}-${file.originalname}`;
+
+
+        const { error: uploadError } = await supabase.storage
+            .from("challenge-media")
+            .upload(filePath, file.buffer, {
+                contentType: file.mimetype
+            });
+
+        if (uploadError) {
+            console.log("Upload Error:", uploadError);
+            return res.status(500).json(uploadError);
+        }
+
+        const { data: urlData } = supabase.storage
+            .from("challenge-media")
+            .getPublicUrl(filePath);
+
+        const { error: mediaError } = await supabase
+            .from("challenge_media")
+            .insert({
+                challenge_id: challenge.id,
+                file_url: urlData.publicUrl,
+                file_type: file.mimetype
+            });
+
+        if (mediaError) {
+            console.log("Media Error:", mediaError);
+            return res.status(500).json(mediaError);
+        }
     }
+
+        res.status(200).json(challenge);
+
+} catch (error) {
+    console.log("SERVER ERROR:", error);
+    res.status(500).json(error);
+}
 });
 
 
