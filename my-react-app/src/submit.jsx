@@ -24,8 +24,15 @@ function Submit() {
     }
 
     function handleFiles(event) {
-        setFiles(Array.from(event.target.files));
-    }
+    const selectedFiles = Array.from(event.target.files);
+
+    setFiles(prevFiles => [
+        ...prevFiles,
+        ...selectedFiles
+    ]);
+
+    event.target.value = "";
+}
 
 async function handleSubmit(event) {
     event.preventDefault();
@@ -33,9 +40,23 @@ async function handleSubmit(event) {
     setMessage("");
 
     try {
+        const data = new FormData();
+
+        data.append("title", formData.title);
+        data.append("description", formData.description);
+        data.append("category", formData.category);
+        data.append("district", formData.district);
+        data.append("area", formData.area);
+        data.append("affected_people", formData.affected_people);
+        data.append("additional_info", formData.additional_info);
+
+        files.forEach(file => {
+            data.append("files", file);
+        });
+
         const response = await axios.post(
             "http://localhost:3000/challenges",
-            formData
+            data
         );
 
         console.log(response.data);
