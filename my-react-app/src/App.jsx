@@ -1,62 +1,67 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from 'react-router-dom'
+import axios from "axios";
 
 function App() {
     const [search, setSearch] = useState("");
-    const [domain, setDomain] = useState("");
+    const [category, setCategory] = useState("");
     const [district, setDistrict] = useState("");
     const navigate = useNavigate()
 
-    const [challenges, setChallenges] = useState([
-        {
-            id: 1,
-            title: "Water shortage in village",
-            district: "Ranchi",
-            domain: "Water",
-            supporters: 23,
-            description:
-                "Residents are facing a shortage of clean drinking water during summer."
-        },
-        {
-            id: 2,
-            title: "Damaged roads near school",
-            district: "Dhanbad",
-            domain: "Infrastructure",
-            supporters: 17,
-            description:
-                "The road near the school has multiple potholes and becomes difficult to use during rain."
-        },
-        {
-            id: 3,
-            title: "Lack of healthcare facilities",
-            district: "Bokaro",
-            domain: "Healthcare",
-            supporters: 31,
-            description:
-                "People in the area have limited access to nearby healthcare facilities."
+    const [challenges, setChallenges] = useState([]);
+
+    useEffect(() => {
+
+        async function getChallenges() {
+
+            try {
+
+                const response = await axios.get(
+                    "http://localhost:3000/challenges"
+                );
+
+                setChallenges(response.data);
+
+            } catch (error) {
+
+                console.log(error);
+
+            }
         }
-    ]);
 
-    function handleSupport(id) {
-        setChallenges(prevChallenges =>
-            prevChallenges.map(challenge =>
-                challenge.id === id
-                    ? {
-                        ...challenge,
-                        supporters: challenge.supporters + 1
-                    }
-                    : challenge
-            )
-        );
-    }
+        getChallenges();
 
-    function viewProblem(challenge) {
-        alert(
-            `Problem: ${challenge.title}\n\n` +
-            `District: ${challenge.district}\n` +
-            `Domain: ${challenge.domain}\n\n` +
-            challenge.description
-        );
+    }, []);
+
+    const categories = [...new Set(
+        challenges.map(challenge => challenge.category)
+    )];
+
+    const districts = [...new Set(
+        challenges.map(challenge => challenge.district)
+    )];
+
+    async function handleSupport(id) {
+
+        try {
+
+            const response = await axios.patch(
+                `http://localhost:3000/challenges/${id}/support`
+            );
+
+            setChallenges(prevChallenges =>
+                prevChallenges.map(challenge =>
+                    challenge.id === id
+                        ? response.data
+                        : challenge
+                )
+            );
+
+        } catch (error) {
+
+            console.log("Support Error:", error);
+
+        }
     }
 
     function submitChallenge() {
@@ -68,13 +73,13 @@ function App() {
             challenge.title.toLowerCase().includes(search.toLowerCase()) ||
             challenge.description.toLowerCase().includes(search.toLowerCase());
 
-        const matchesDomain =
-            domain === "" || challenge.domain === domain;
+        const matchesCategory =
+            category === "" || challenge.category === category;
 
         const matchesDistrict =
             district === "" || challenge.district === district;
 
-        return matchesSearch && matchesDomain && matchesDistrict;
+        return matchesSearch && matchesCategory && matchesDistrict;
     });
 
     return (
@@ -124,38 +129,20 @@ function App() {
                         />
 
                         <select
-                            value={domain}
+                            value={category}
                             onChange={(event) =>
-                                setDomain(event.target.value)
+                                setCategory(event.target.value)
                             }
                         >
                             <option value="">
-                                All Domains
+                                All Categories
                             </option>
 
-                            <option value="Water">
-                                Water
-                            </option>
-
-                            <option value="Healthcare">
-                                Healthcare
-                            </option>
-
-                            <option value="Infrastructure">
-                                Infrastructure
-                            </option>
-
-                            <option value="Education">
-                                Education
-                            </option>
-
-                            <option value="Agriculture">
-                                Agriculture
-                            </option>
-
-                            <option value="Environment">
-                                Environment
-                            </option>
+                            {categories.map(item => (
+                                <option key={item} value={item}>
+                                    {item}
+                                </option>
+                            ))}
                         </select>
 
 
@@ -169,17 +156,11 @@ function App() {
                                 All Districts
                             </option>
 
-                            <option value="Ranchi">
-                                Ranchi
-                            </option>
-
-                            <option value="Dhanbad">
-                                Dhanbad
-                            </option>
-
-                            <option value="Bokaro">
-                                Bokaro
-                            </option>
+                            {districts.map(item => (
+                                <option key={item} value={item}>
+                                    {item}
+                                </option>
+                            ))}
                         </select>
 
                     </div>
@@ -209,7 +190,7 @@ function App() {
                                     </p>
 
                                     <p>
-                                        Domain: {challenge.domain}
+                                        Category: {challenge.category}
                                     </p>
 
                                     <p>
@@ -218,7 +199,7 @@ function App() {
 
                                     <button
                                         onClick={() =>
-                                            viewProblem(challenge)
+                                            navigate(`/challenges/${challenge.id}`)
                                         }
                                     >
                                         View Problem

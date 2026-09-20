@@ -1,13 +1,85 @@
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import axios from "axios";
 
 function UniversityDashboard() {
+
+    const navigate = useNavigate();
+
+    const [challenges, setChallenges] = useState([]);
+    const [projects, setProjects] = useState([]);
+
+    useEffect(() => {
+
+        async function getChallenges() {
+
+            try {
+
+                const response = await axios.get(
+                    "http://localhost:3000/challenges"
+                );
+
+                setChallenges(response.data);
+
+            } catch (error) {
+
+                console.log(error);
+
+            }
+        }
+
+        async function getProjects() {
+
+            try {
+
+                const response = await axios.get(
+                    "http://localhost:3000/projects"
+                );
+
+                setProjects(response.data);
+
+            } catch (error) {
+
+                console.log(error);
+
+            }
+        }
+
+        getChallenges();
+        getProjects();
+
+    }, []);
+
+    function getPriority(supporters) {
+
+        if (supporters >= 10) {
+            return "High";
+        }
+
+        if (supporters >= 5) {
+            return "Medium";
+        }
+
+        return "Low";
+    }
+
+    const highPriorityChallenges = challenges.filter(
+        challenge => getPriority(challenge.supporters) === "High"
+    );
+
+    const industryCollaborations = projects.filter(
+        project => project.industry_partner
+    );
+
     return (
         <div>
 
             <aside>
+
                 <h2>University Portal</h2>
 
                 <nav>
+
                     <p>
                         <Link to="/university">
                             Dashboard
@@ -43,8 +115,11 @@ function UniversityDashboard() {
                             Progress Reports
                         </Link>
                     </p>
+
                 </nav>
+
             </aside>
+
 
             <main>
 
@@ -55,121 +130,143 @@ function UniversityDashboard() {
                     teams and industry collaborations.
                 </p>
 
+
                 <section>
 
                     <h2>Overview</h2>
 
                     <div>
                         <h3>Total Challenges</h3>
-                        <p>42</p>
+                        <p>{challenges.length}</p>
                     </div>
 
                     <div>
                         <h3>High Priority Challenges</h3>
-                        <p>8</p>
+                        <p>{highPriorityChallenges.length}</p>
                     </div>
 
                     <div>
                         <h3>Active Projects</h3>
-                        <p>5</p>
+                        <p>{projects.length}</p>
                     </div>
 
                     <div>
                         <h3>Industry Collaborations</h3>
-                        <p>3</p>
+                        <p>{industryCollaborations.length}</p>
                     </div>
 
                 </section>
+
 
                 <section>
 
                     <h2>High Priority Challenges</h2>
 
-                    <article>
-                        <h3>
-                            Water shortage in village
-                        </h3>
+                    {highPriorityChallenges.length === 0 ? (
 
                         <p>
-                            District: Ranchi
+                            No high priority challenges.
                         </p>
 
-                        <p>
-                            People affected: 2,000
-                        </p>
+                    ) : (
 
-                        <p>
-                            Supporters: 127
-                        </p>
+                        highPriorityChallenges.map(challenge => (
 
-                        <p>
-                            Priority: High
-                        </p>
+                            <article key={challenge.id}>
 
-                        <button>
-                            View Challenge
-                        </button>
-                    </article>
+                                <h3>
+                                    {challenge.title}
+                                </h3>
 
-                    <article>
-                        <h3>
-                            Lack of healthcare facilities
-                        </h3>
+                                <p>
+                                    District: {challenge.district}
+                                </p>
 
-                        <p>
-                            District: Bokaro
-                        </p>
+                                <p>
+                                    Category: {challenge.category}
+                                </p>
 
-                        <p>
-                            People affected: 1,500
-                        </p>
+                                <p>
+                                    Supporters: {challenge.supporters}
+                                </p>
 
-                        <p>
-                            Supporters: 94
-                        </p>
+                                <p>
+                                    Priority: {getPriority(challenge.supporters)}
+                                </p>
 
-                        <p>
-                            Priority: High
-                        </p>
+                                <button
+                                    onClick={() =>
+                                        navigate(
+                                            `/university/challenges/${challenge.id}`
+                                        )
+                                    }
+                                >
+                                    View Challenge
+                                </button>
 
-                        <button>
-                            View Challenge
-                        </button>
-                    </article>
+                            </article>
+
+                        ))
+
+                    )}
 
                 </section>
+
 
                 <section>
 
                     <h2>Active Projects</h2>
 
-                    <article>
-                        <h3>
-                            Water Monitoring System
-                        </h3>
+                    {projects.length === 0 ? (
 
                         <p>
-                            Team: Water Innovation Team
+                            No active projects.
                         </p>
 
-                        <p>
-                            Faculty Mentor: Dr. XYZ
-                        </p>
+                    ) : (
 
-                        <p>
-                            Industry Partner: ABC Technologies
-                        </p>
+                        projects.map(project => (
 
-                        <p>
-                            Progress: 65%
-                        </p>
+                            <article key={project.id}>
 
-                        <button>
-                            View Project
-                        </button>
-                    </article>
+                                <h3>
+                                    {project.title}
+                                </h3>
+
+                                <p>
+                                    Status: {project.status}
+                                </p>
+
+                                <p>
+                                    Progress: {project.progress}%
+                                </p>
+
+                                <p>
+                                    Faculty Mentor: {project.faculty_mentor || "Not assigned"}
+                                </p>
+
+                                <p>
+                                    Industry Partner: {project.industry_partner || "Not assigned"}
+                                </p>
+
+                                <button
+                                    onClick={() =>
+                                        navigate(
+                                            `/university/projects/${project.id}`
+                                        )
+                                    }
+                                >
+                                    View Project
+                                </button>
+
+                            </article>
+
+                        ))
+
+                    )}
 
                 </section>
+
 
             </main>
 
