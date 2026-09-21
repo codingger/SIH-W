@@ -156,6 +156,124 @@ app.get("/projects", async (req, res) => {
     }
 });
 
+app.get("/industry-partners", async (req, res) => {
+    try {
+
+        const { data, error } = await supabase
+            .from("industry_partners")
+            .select("*")
+            .order("created_at", { ascending: false });
+
+        if (error) {
+            console.log("Industry Partner Error:", error);
+            return res.status(500).json(error);
+        }
+
+        res.status(200).json(data);
+
+    } catch (error) {
+
+        console.log("SERVER ERROR:", error);
+        res.status(500).json(error);
+
+    }
+});
+
+app.get("/teams", async (req, res) => {
+    try {
+
+        const { data, error } = await supabase
+            .from("teams")
+            .select("*")
+            .order("created_at", { ascending: false });
+
+        if (error) {
+            console.log("Team Error:", error);
+            return res.status(500).json(error);
+        }
+
+        res.status(200).json(data);
+
+    } catch (error) {
+
+        console.log("SERVER ERROR:", error);
+        res.status(500).json(error);
+
+    }
+});
+
+app.get("/projects/:id", async (req, res) => {
+
+    try {
+
+        const { id } = req.params;
+
+        const { data, error } = await supabase
+            .from("projects")
+            .select("*")
+            .eq("id", id)
+            .single();
+
+        if (error) {
+
+            console.log("Project Error:", error);
+
+            return res.status(500).json(error);
+
+        }
+
+        res.status(200).json(data);
+
+    } catch (error) {
+
+        console.log("SERVER ERROR:", error);
+
+        res.status(500).json(error);
+
+    }
+
+});
+
+app.post("/teams", async (req, res) => {
+    try {
+
+        const {
+            team_name,
+            project_id,
+            student_count,
+            students,
+            faculty_count,
+            faculty
+        } = req.body;
+
+        const { data, error } = await supabase
+            .from("teams")
+            .insert({
+                team_name: team_name,
+                project_id: project_id,
+                student_count: student_count,
+                students: students,
+                faculty_count: faculty_count,
+                faculty: faculty
+            })
+            .select()
+            .single();
+
+        if (error) {
+            console.log("Team Error:", error);
+            return res.status(500).json(error);
+        }
+
+        res.status(200).json(data);
+
+    } catch (error) {
+
+        console.log("SERVER ERROR:", error);
+        res.status(500).json(error);
+
+    }
+});
+
 app.post("/projects", async (req, res) => {
     try {
 
@@ -217,6 +335,78 @@ app.post("/projects", async (req, res) => {
         res.status(500).json(error);
 
     }
+});
+
+app.patch("/projects/:id/collaborate", async (req, res) => {
+
+    try {
+
+        const { id } = req.params;
+        const { company_name } = req.body;
+
+        const { data, error } = await supabase
+            .from("projects")
+            .update({
+                industry_partner: company_name
+            })
+            .eq("id", id)
+            .select()
+            .single();
+
+        if (error) {
+
+            console.log("Collaboration Error:", error);
+
+            return res.status(500).json(error);
+
+        }
+
+        res.status(200).json(data);
+
+    } catch (error) {
+
+        console.log("SERVER ERROR:", error);
+
+        res.status(500).json(error);
+
+    }
+
+});
+
+app.post("/projects/:id/collaborate", async (req, res) => {
+
+    try {
+
+        const { id } = req.params;
+        const { company_id } = req.body;
+
+        const { data, error } = await supabase
+            .from("project_collaborations")
+            .insert({
+                project_id: id,
+                company_id: company_id
+            })
+            .select()
+            .single();
+
+        if (error) {
+
+            console.log("Collaboration Error:", error);
+
+            return res.status(500).json(error);
+
+        }
+
+        res.status(200).json(data);
+
+    } catch (error) {
+
+        console.log("SERVER ERROR:", error);
+
+        res.status(500).json(error);
+
+    }
+
 });
 
 app.post("/users", async (req, res) => {
