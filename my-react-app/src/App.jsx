@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom';
 import axios from "axios";
 
 function App() {
@@ -86,7 +86,13 @@ function App() {
         <div>
 
             <header>
+
                 <h2>Societal Innovation Portal</h2>
+
+                <Link to="/login">
+                    Login
+                </Link>
+
             </header>
 
 
