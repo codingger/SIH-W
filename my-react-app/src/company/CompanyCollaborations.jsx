@@ -4,7 +4,7 @@ import axios from "axios";
 
 function CompanyCollaborations() {
 
-    const currentCompanyId = 1;
+    const currentCompanyId = 4;
 
     const [collaborations, setCollaborations] = useState([]);
 

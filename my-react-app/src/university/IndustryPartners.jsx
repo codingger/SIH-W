@@ -5,7 +5,8 @@ import axios from "axios";
 function IndustryPartners() {
 
     const [partners, setPartners] = useState([]);
-    const [requests, setRequests] = useState([]);
+    const [applications, setApplications] = useState([]);
+    const [collaborationRequests, setCollaborationRequests] = useState([]);
 
     useEffect(() => {
 
@@ -17,12 +18,22 @@ function IndustryPartners() {
                     "http://localhost:3000/industry-partners"
                 );
 
-                const requestsResponse = await axios.get(
+                const applicationsResponse = await axios.get(
+                    "http://localhost:3000/industry-partner-applications"
+                );
+
+                const collaborationResponse = await axios.get(
                     "http://localhost:3000/collaboration-requests"
                 );
 
                 setPartners(partnersResponse.data);
-                setRequests(requestsResponse.data);
+                setApplications(applicationsResponse.data);
+
+                setCollaborationRequests(
+                    collaborationResponse.data.filter(
+                        request => request.status === "Requested"
+                    )
+                );
 
             } catch (error) {
 
@@ -37,7 +48,42 @@ function IndustryPartners() {
     }, []);
 
 
-    async function updateRequest(id, status) {
+    async function updateApplication(id, status) {
+
+        try {
+
+            const response = await axios.patch(
+                `http://localhost:3000/industry-partner-applications/${id}`,
+                {
+                    status: status
+                }
+            );
+
+            setApplications(prevApplications =>
+                prevApplications.filter(
+                    application => application.id !== id
+                )
+            );
+
+            if (status === "Accepted") {
+
+                setPartners(prevPartners => [
+                    response.data,
+                    ...prevPartners
+                ]);
+
+            }
+
+        } catch (error) {
+
+            console.log(error);
+
+        }
+
+    }
+
+
+    async function updateCollaboration(id, status) {
 
         try {
 
@@ -48,16 +94,13 @@ function IndustryPartners() {
                 }
             );
 
-            setRequests(prevRequests =>
-                prevRequests.map(request =>
-                    request.id === id
-                        ? {
-                            ...request,
-                            status: response.data.status
-                        }
-                        : request
+            setCollaborationRequests(prevRequests =>
+                prevRequests.filter(
+                    request => request.id !== id
                 )
             );
+
+            console.log(response.data);
 
         } catch (error) {
 
@@ -123,66 +166,72 @@ function IndustryPartners() {
                 <h1>Industry Partners</h1>
 
                 <p>
-                    Companies and industry collaboration requests.
+                    Review company applications, collaboration requests,
+                    and approved industry partners.
                 </p>
 
 
-                <h2>Collaboration Requests</h2>
+                <h2>Industry Partner Applications</h2>
 
-                {requests.length === 0 ? (
+                {applications.length === 0 ? (
 
                     <p>
-                        No collaboration requests.
+                        No pending applications.
                     </p>
 
                 ) : (
 
-                    requests.map(request => (
+                    applications.map(application => (
 
-                        <article key={request.id}>
+                        <article key={application.id}>
 
                             <h3>
-                                {request.industry_partners.company_name}
+                                {application.company_name}
                             </h3>
 
                             <p>
-                                Project:{" "}
-                                {request.projects.title}
+                                Industry: {application.industry}
                             </p>
 
                             <p>
-                                Status: {request.status}
+                                {application.description}
                             </p>
 
-                            {request.status === "Requested" && (
+                            <p>
+                                Contact: {application.contact_person}
+                            </p>
 
-                                <div>
+                            <p>
+                                Email: {application.email}
+                            </p>
 
-                                    <button
-                                        onClick={() =>
-                                            updateRequest(
-                                                request.id,
-                                                "Accepted"
-                                            )
-                                        }
-                                    >
-                                        Accept
-                                    </button>
+                            <p>
+                                Status: {application.status}
+                            </p>
 
-                                    <button
-                                        onClick={() =>
-                                            updateRequest(
-                                                request.id,
-                                                "Rejected"
-                                            )
-                                        }
-                                    >
-                                        Reject
-                                    </button>
 
-                                </div>
+                            <button
+                                onClick={() =>
+                                    updateApplication(
+                                        application.id,
+                                        "Accepted"
+                                    )
+                                }
+                            >
+                                Accept
+                            </button>
 
-                            )}
+
+                            <button
+                                onClick={() =>
+                                    updateApplication(
+                                        application.id,
+                                        "Rejected"
+                                    )
+                                }
+                            >
+                                Reject
+                            </button>
 
                         </article>
 
@@ -191,7 +240,84 @@ function IndustryPartners() {
                 )}
 
 
-                <h2>Industry Partners</h2>
+                <h2>Project Collaboration Requests</h2>
+
+                {collaborationRequests.length === 0 ? (
+
+                    <p>
+                        No pending collaboration requests.
+                    </p>
+
+                ) : (
+
+                    collaborationRequests.map(request => (
+
+                        <article key={request.id}>
+
+                            <h3>
+                                {request.projects?.title}
+                            </h3>
+
+                            <p>
+                                Project: {request.projects?.description}
+                            </p>
+
+                            <p>
+                                Company:{" "}
+                                {request.industry_partners?.company_name}
+                            </p>
+
+                            <p>
+                                Industry:{" "}
+                                {request.industry_partners?.industry}
+                            </p>
+
+                            <p>
+                                Contact:{" "}
+                                {request.industry_partners?.contact_person}
+                            </p>
+
+                            <p>
+                                Email:{" "}
+                                {request.industry_partners?.email}
+                            </p>
+
+                            <p>
+                                Status: {request.status}
+                            </p>
+
+
+                            <button
+                                onClick={() =>
+                                    updateCollaboration(
+                                        request.id,
+                                        "Accepted"
+                                    )
+                                }
+                            >
+                                Accept
+                            </button>
+
+
+                            <button
+                                onClick={() =>
+                                    updateCollaboration(
+                                        request.id,
+                                        "Rejected"
+                                    )
+                                }
+                            >
+                                Reject
+                            </button>
+
+                        </article>
+
+                    ))
+
+                )}
+
+
+                <h2>Approved Industry Partners</h2>
 
                 {partners.length === 0 ? (
 
@@ -219,6 +345,10 @@ function IndustryPartners() {
 
                             <p>
                                 Contact: {partner.contact_person}
+                            </p>
+
+                            <p>
+                                Email: {partner.email}
                             </p>
 
                         </article>

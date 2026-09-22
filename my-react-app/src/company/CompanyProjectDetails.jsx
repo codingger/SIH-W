@@ -6,10 +6,11 @@ function CompanyProjectDetails() {
 
     const { id } = useParams();
 
-    const currentCompanyId = 1;
+    const currentCompanyId = 4;
 
     const [project, setProject] = useState(null);
     const [teams, setTeams] = useState([]);
+    const [company, setCompany] = useState(null);
 
     useEffect(() => {
 
@@ -25,6 +26,10 @@ function CompanyProjectDetails() {
                     "http://localhost:3000/teams"
                 );
 
+                const companyResponse = await axios.get(
+                    `http://localhost:3000/industry-partners/${currentCompanyId}`
+                );
+
                 setProject(projectResponse.data);
 
                 const projectTeams = teamsResponse.data.filter(
@@ -32,6 +37,8 @@ function CompanyProjectDetails() {
                 );
 
                 setTeams(projectTeams);
+
+                setCompany(companyResponse.data);
 
             } catch (error) {
 
@@ -173,7 +180,7 @@ function CompanyProjectDetails() {
                 )}
 
 
-                {!project.industry_partner && (
+                {!project.industry_partner && company?.status === "Accepted" && (
 
                     <section>
 
@@ -186,6 +193,36 @@ function CompanyProjectDetails() {
                         <button onClick={collaborate}>
                             Collaborate with this Project
                         </button>
+
+                    </section>
+
+                )}
+
+
+                {!project.industry_partner && company?.status === "Pending" && (
+
+                    <section>
+
+                        <h2>Industry Partner Approval</h2>
+
+                        <p>
+                            Your Industry Partner application is still under review.
+                        </p>
+
+                    </section>
+
+                )}
+
+
+                {!project.industry_partner && company?.status === "Rejected" && (
+
+                    <section>
+
+                        <h2>Industry Partner Approval</h2>
+
+                        <p>
+                            Your Industry Partner application was rejected.
+                        </p>
 
                     </section>
 

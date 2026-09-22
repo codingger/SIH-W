@@ -16,6 +16,8 @@ import CompanyProjects from './company/CompanyProjects.jsx'
 import CompanyProjectDetails from './company/CompanyProjectDetails.jsx'
 import CompanyCollaborations from './company/CompanyCollaborations.jsx'
 import ProjectDetails from './university/ProjectDetails.jsx'
+import IndustryPartnerApplication from './company/IndustryPartnerApplication.jsx'
+import Login from "./Login";
 
 import './index.css'
 
@@ -76,6 +78,14 @@ const router = createBrowserRouter([
     path: "/company/collaborations",
     element: <CompanyCollaborations />
   },
+  {
+    path: "/company/industry-application",
+    element: <IndustryPartnerApplication />
+  },
+  {
+    path: "/login",
+    element: <Login />
+  }
 ]);
 
 createRoot(document.getElementById('root')).render(
