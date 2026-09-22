@@ -14,6 +14,8 @@ import Teams from './university/Teams.jsx'
 import CompanyDashboard from './company/CompanyDashboard.jsx'
 import CompanyProjects from './company/CompanyProjects.jsx'
 import CompanyProjectDetails from './company/CompanyProjectDetails.jsx'
+import CompanyCollaborations from './company/CompanyCollaborations.jsx'
+import ProjectDetails from './university/ProjectDetails.jsx'
 
 import './index.css'
 
@@ -39,12 +41,12 @@ const router = createBrowserRouter([
     element: <ChallengeDetails />
   },
   {
-    path: "/university/challenges/:id",
-    element: <ChallengeDetails />
-  },
-  {
     path: "/university/projects",
     element: <Projects />
+  },
+  {
+    path: "/university/projects/:id",
+    element: <ProjectDetails />
   },
   {
     path: "/university/challenges",
@@ -69,6 +71,10 @@ const router = createBrowserRouter([
   {
     path: "/company/projects/:id",
     element: <CompanyProjectDetails />
+  },
+  {
+    path: "/company/collaborations",
+    element: <CompanyCollaborations />
   },
 ]);
 

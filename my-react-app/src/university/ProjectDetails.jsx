@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import axios from "axios";
 
-function IndustryPartners() {
+function ProjectDetails() {
 
-    const [partners, setPartners] = useState([]);
+    const { id } = useParams();
+
+    const [project, setProject] = useState(null);
+    const [teams, setTeams] = useState([]);
     const [requests, setRequests] = useState([]);
+    const [partners, setPartners] = useState([]);
 
     useEffect(() => {
 
@@ -13,16 +17,31 @@ function IndustryPartners() {
 
             try {
 
-                const partnersResponse = await axios.get(
-                    "http://localhost:3000/industry-partners"
+                const projectResponse = await axios.get(
+                    `http://localhost:3000/projects/${id}`
+                );
+
+                const teamsResponse = await axios.get(
+                    "http://localhost:3000/teams"
                 );
 
                 const requestsResponse = await axios.get(
                     "http://localhost:3000/collaboration-requests"
                 );
 
-                setPartners(partnersResponse.data);
-                setRequests(requestsResponse.data);
+                setProject(projectResponse.data);
+
+                const projectTeams = teamsResponse.data.filter(
+                    team => team.project_id === Number(id)
+                );
+
+                setTeams(projectTeams);
+
+                const projectRequests = requestsResponse.data.filter(
+                    request => request.project_id === Number(id)
+                );
+
+                setRequests(projectRequests);
 
             } catch (error) {
 
@@ -34,15 +53,15 @@ function IndustryPartners() {
 
         getData();
 
-    }, []);
+    }, [id]);
 
 
-    async function updateRequest(id, status) {
+    async function updateRequest(requestId, status) {
 
         try {
 
             const response = await axios.patch(
-                `http://localhost:3000/collaboration-requests/${id}`,
+                `http://localhost:3000/collaboration-requests/${requestId}`,
                 {
                     status: status
                 }
@@ -50,7 +69,7 @@ function IndustryPartners() {
 
             setRequests(prevRequests =>
                 prevRequests.map(request =>
-                    request.id === id
+                    request.id === requestId
                         ? {
                             ...request,
                             status: response.data.status
@@ -59,6 +78,18 @@ function IndustryPartners() {
                 )
             );
 
+            if (status === "Accepted") {
+
+                setProject(prevProject => ({
+                    ...prevProject,
+                    industry_partner:
+                        requests.find(
+                            request => request.id === requestId
+                        )?.industry_partners?.company_name
+                }));
+
+            }
+
         } catch (error) {
 
             console.log(error);
@@ -66,6 +97,16 @@ function IndustryPartners() {
         }
 
     }
+
+
+    if (!project) {
+        return <p>Loading project...</p>;
+    }
+
+
+    const acceptedPartners = requests.filter(
+        request => request.status === "Accepted"
+    );
 
 
     return (
@@ -120,19 +161,68 @@ function IndustryPartners() {
 
             <main>
 
-                <h1>Industry Partners</h1>
+                <h1>{project.title}</h1>
 
                 <p>
-                    Companies and industry collaboration requests.
+                    {project.description}
                 </p>
 
 
-                <h2>Collaboration Requests</h2>
+                <h2>Project Information</h2>
+
+                <p>
+                    Status: {project.status}
+                </p>
+
+                <p>
+                    Progress: {project.progress}%
+                </p>
+
+                <p>
+                    Faculty Mentor:{" "}
+                    {project.faculty_mentor || "Not assigned"}
+                </p>
+
+
+                <h2>Teams</h2>
+
+                {teams.length === 0 ? (
+
+                    <p>
+                        No teams assigned to this project.
+                    </p>
+
+                ) : (
+
+                    teams.map(team => (
+
+                        <article key={team.id}>
+
+                            <h3>
+                                {team.team_name}
+                            </h3>
+
+                            <p>
+                                Students: {team.student_count}
+                            </p>
+
+                            <p>
+                                Faculty: {team.faculty_count}
+                            </p>
+
+                        </article>
+
+                    ))
+
+                )}
+
+
+                <h2>Industry Collaboration Requests</h2>
 
                 {requests.length === 0 ? (
 
                     <p>
-                        No collaboration requests.
+                        No industry collaboration requests.
                     </p>
 
                 ) : (
@@ -146,13 +236,19 @@ function IndustryPartners() {
                             </h3>
 
                             <p>
-                                Project:{" "}
-                                {request.projects.title}
+                                Industry:{" "}
+                                {request.industry_partners.industry}
+                            </p>
+
+                            <p>
+                                Contact:{" "}
+                                {request.industry_partners.contact_person}
                             </p>
 
                             <p>
                                 Status: {request.status}
                             </p>
+
 
                             {request.status === "Requested" && (
 
@@ -193,32 +289,35 @@ function IndustryPartners() {
 
                 <h2>Industry Partners</h2>
 
-                {partners.length === 0 ? (
+                {acceptedPartners.length === 0 ? (
 
                     <p>
-                        No industry partners available.
+                        No industry partners accepted for this project.
                     </p>
 
                 ) : (
 
-                    partners.map(partner => (
+                    acceptedPartners.map(request => (
 
-                        <article key={partner.id}>
+                        <article key={request.id}>
 
                             <h3>
-                                {partner.company_name}
+                                {request.industry_partners.company_name}
                             </h3>
 
                             <p>
-                                Industry: {partner.industry}
+                                Industry:{" "}
+                                {request.industry_partners.industry}
                             </p>
 
                             <p>
-                                {partner.description}
+                                Contact:{" "}
+                                {request.industry_partners.contact_person}
                             </p>
 
                             <p>
-                                Contact: {partner.contact_person}
+                                Email:{" "}
+                                {request.industry_partners.email}
                             </p>
 
                         </article>
@@ -233,4 +332,4 @@ function IndustryPartners() {
     );
 }
 
-export default IndustryPartners;
+export default ProjectDetails;

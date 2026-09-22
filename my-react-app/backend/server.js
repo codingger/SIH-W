@@ -234,6 +234,166 @@ app.get("/projects/:id", async (req, res) => {
 
 });
 
+app.get("/company/collaborations/:company_id", async (req, res) => {
+
+    try {
+
+        const { company_id } = req.params;
+
+        const { data, error } = await supabase
+            .from("project_collaborations")
+            .select(`
+                *,
+                projects (
+                    id,
+                    title,
+                    description,
+                    status,
+                    progress
+                )
+            `)
+            .eq("company_id", company_id)
+            .order("created_at", { ascending: false });
+
+        if (error) {
+
+            console.log("Collaboration Error:", error);
+
+            return res.status(500).json(error);
+
+        }
+
+        res.status(200).json(data);
+
+    } catch (error) {
+
+        console.log("SERVER ERROR:", error);
+
+        res.status(500).json(error);
+
+    }
+
+});
+
+app.get("/collaboration-requests", async (req, res) => {
+
+    try {
+
+        const { data, error } = await supabase
+            .from("project_collaborations")
+            .select(`
+                *,
+                projects (
+                    id,
+                    title,
+                    description,
+                    status,
+                    progress
+                ),
+                industry_partners (
+                    id,
+                    company_name,
+                    industry,
+                    contact_person,
+                    email
+                )
+            `)
+            .order("created_at", { ascending: false });
+
+        if (error) {
+
+            console.log("Collaboration Request Error:", error);
+
+            return res.status(500).json(error);
+
+        }
+
+        res.status(200).json(data);
+
+    } catch (error) {
+
+        console.log("SERVER ERROR:", error);
+
+        res.status(500).json(error);
+
+    }
+
+});
+
+app.patch("/collaboration-requests/:id", async (req, res) => {
+
+    try {
+
+        const { id } = req.params;
+        const { status } = req.body;
+
+        const { data: collaboration, error: collaborationError } =
+            await supabase
+                .from("project_collaborations")
+                .update({
+                    status: status
+                })
+                .eq("id", id)
+                .select()
+                .single();
+
+        if (collaborationError) {
+
+            console.log("Collaboration Error:", collaborationError);
+
+            return res.status(500).json(collaborationError);
+
+        }
+
+
+        if (status === "Accepted") {
+
+            const { data: company, error: companyError } =
+                await supabase
+                    .from("industry_partners")
+                    .select("company_name")
+                    .eq("id", collaboration.company_id)
+                    .single();
+
+            if (companyError) {
+
+                console.log("Company Error:", companyError);
+
+                return res.status(500).json(companyError);
+
+            }
+
+
+            const { error: projectError } = await supabase
+                .from("projects")
+                .update({
+                    industry_partner: company.company_name
+                })
+                .eq("id", collaboration.project_id);
+
+            if (projectError) {
+
+                console.log("Project Error:", projectError);
+
+                return res.status(500).json(projectError);
+
+            }
+
+        }
+
+
+        res.status(200).json(collaboration);
+
+    } catch (error) {
+
+        console.log("SERVER ERROR:", error);
+
+        res.status(500).json(error);
+
+    }
+
+});
+
 app.post("/teams", async (req, res) => {
     try {
 
