@@ -22,10 +22,13 @@ app.use((req, res, next) => {
     next();
 });
 
-const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SECRET_KEY
-);
+const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY)
+    ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY)
+    : null;
+
+if (!supabase) {
+    console.warn("⚠️ SUPABASE_URL or SUPABASE_SECRET_KEY not set in .env. Running in standalone fallback mode.");
+}
 
 app.get("/", (req, res) => {
     res.send("Backend working");
