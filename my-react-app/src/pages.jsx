@@ -41,6 +41,8 @@ import {
   createTeam,
   getCompanyCollaborations,
   requestCollaboration,
+  getCollaborationRequests,
+  updateCollaborationRequest,
   getIndustryPartners,
   getIndustryPartnerApplications,
   updatePartnerApplication,
@@ -524,11 +526,22 @@ export function Submit() {
           <>
             <div className="form-field">
               <label htmlFor="f-district">District *</label>
-              <select id="f-district" className="select" value={form.district} onChange={handleChange('district')}>
-                {['Ranchi', 'Dhanbad', 'Bokaro', 'Jamshedpur', 'Hazaribagh', 'Giridih', 'Deoghar', 'Palamu'].map(d => (
-                  <option key={d} value={d}>{d}</option>
+              <input
+                id="f-district"
+                list="district-options"
+                className="input"
+                placeholder="Type or select a district (e.g. Ranchi, Dhanbad...)"
+                value={form.district}
+                onChange={handleChange('district')}
+              />
+              <datalist id="district-options">
+                {['Ranchi', 'Dhanbad', 'Bokaro', 'Jamshedpur', 'East Singhbhum', 'West Singhbhum', 'Hazaribagh', 'Giridih', 'Deoghar', 'Palamu', 'Ramgarh', 'Chatra', 'Dumka', 'Garhwa', 'Godda', 'Gumla', 'Jamtara', 'Khunti', 'Koderma', 'Latehar', 'Lohardaga', 'Pakur', 'Sahibganj', 'Seraikela Kharsawan', 'Simdega'].map(d => (
+                  <option key={d} value={d} />
                 ))}
-              </select>
+              </datalist>
+              <small className="muted text-sm" style={{ marginTop: '0.25rem', display: 'block' }}>
+                You can select from the dropdown options or type your custom district name freely.
+              </small>
               {errors.district && <span className="field-error">{errors.district}</span>}
             </div>
 
@@ -1137,17 +1150,25 @@ export function ProjectDetailView({ role = 'university' }) {
   const { id } = useParams();
   const [project, setProject] = useState(null);
   const [teams, setTeams] = useState([]);
+  const [projectCollabs, setProjectCollabs] = useState([]);
   const [showCollabModal, setShowCollabModal] = useState(false);
   const [collabSent, setCollabSent] = useState(false);
   const [collabReason, setCollabReason] = useState('');
   const [supportTypes, setSupportTypes] = useState(['Technical Mentorship']);
   const isCompany = role === 'company';
 
-  useEffect(() => {
+  const loadProjectData = () => {
     getProject(id).then(setProject);
     getTeams().then(all => {
       setTeams(all.filter(t => String(t.project_id) === String(id)));
     });
+    getCollaborationRequests().then(all => {
+      setProjectCollabs((all || []).filter(c => String(c.project_id) === String(id)));
+    });
+  };
+
+  useEffect(() => {
+    loadProjectData();
   }, [id]);
 
   const handleSendCollab = async () => {
@@ -1156,7 +1177,19 @@ export function ProjectDetailView({ role = 'university' }) {
     setShowCollabModal(false);
   };
 
+  const handleAcceptProjectCollab = async (collabId) => {
+    await updateCollaborationRequest(collabId, 'Accepted');
+    loadProjectData();
+  };
+
+  const handleRejectProjectCollab = async (collabId) => {
+    await updateCollaborationRequest(collabId, 'Rejected');
+    loadProjectData();
+  };
+
   if (!project) return <div className="card" style={{ padding: '2rem' }}>Loading project...</div>;
+
+  const pendingCollabs = projectCollabs.filter(c => c.status === 'Requested');
 
   return (
     <>
@@ -1246,6 +1279,36 @@ export function ProjectDetailView({ role = 'university' }) {
                 </button>
               )
             )}
+          </div>
+        )}
+
+        {/* University view: Pending Collaboration Requests for this project */}
+        {!isCompany && pendingCollabs.length > 0 && (
+          <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border)', paddingTop: '1.25rem' }}>
+            <h4 style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>Incoming Sponsorship Requests for this Project</h4>
+            <div className="col" style={{ gap: '0.75rem' }}>
+              {pendingCollabs.map(req => {
+                const compName = req.industry_partners?.company_name || req.company_name || 'Tata CleanTech Innovations';
+                const compInd = req.industry_partners?.industry || 'Clean Tech';
+                return (
+                  <div key={req.id} className="card row between" style={{ background: 'var(--bg)', padding: '1rem' }}>
+                    <div>
+                      <h4 style={{ margin: 0 }}>{compName}</h4>
+                      <span className="pill purple text-sm" style={{ margin: '0.25rem 0' }}>{compInd}</span>
+                      <p className="muted text-sm" style={{ margin: 0 }}>Requested industrial mentorship & co-sponsorship.</p>
+                    </div>
+                    <div className="row" style={{ gap: '0.5rem' }}>
+                      <button className="btn sm" onClick={() => handleAcceptProjectCollab(req.id)}>
+                        Accept Sponsorship
+                      </button>
+                      <button className="btn ghost sm danger" onClick={() => handleRejectProjectCollab(req.id)}>
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
@@ -1568,35 +1631,91 @@ export function UniTeams() {
 export function UniIndustry() {
   const [partners, setPartners] = useState([]);
   const [applications, setApplications] = useState([]);
+  const [collabRequests, setCollabRequests] = useState([]);
 
-  useEffect(() => {
+  const loadAllData = () => {
     getIndustryPartners().then(setPartners);
     getIndustryPartnerApplications().then(setApplications);
+    getCollaborationRequests().then(setCollabRequests);
+  };
+
+  useEffect(() => {
+    loadAllData();
   }, []);
 
-  const handleApprove = async (id) => {
-    await updatePartnerApplication(id, 'Accepted');
-    setApplications(prev => prev.filter(a => a.id !== id));
-    getIndustryPartners().then(setPartners);
+  const handleAcceptCollab = async (id) => {
+    await updateCollaborationRequest(id, 'Accepted');
+    loadAllData();
   };
 
-  const handleReject = async (id) => {
-    await updatePartnerApplication(id, 'Rejected');
-    setApplications(prev => prev.filter(a => a.id !== id));
+  const handleRejectCollab = async (id) => {
+    await updateCollaborationRequest(id, 'Rejected');
+    loadAllData();
   };
+
+  const handleApproveApp = async (id) => {
+    await updatePartnerApplication(id, 'Accepted');
+    loadAllData();
+  };
+
+  const handleRejectApp = async (id) => {
+    await updatePartnerApplication(id, 'Rejected');
+    loadAllData();
+  };
+
+  const pendingCollabs = collabRequests.filter(c => c.status === 'Requested');
 
   return (
     <>
       <PageHead
-        title="Industry Partners & Collaboration Management"
-        subtitle="Review corporate sponsorship applications and approved enterprise research partners."
+        title="Industry Partners & Collaboration Hub"
+        subtitle="Manage incoming corporate sponsorship requests, partner applications, and verified enterprise research partners."
       />
 
-      {/* Applications Awaiting Approval */}
+      {/* 1. Project Collaboration Requests from Companies */}
+      <div className="card" style={{ marginBottom: '2rem', padding: '1.5rem', borderLeft: '4px solid var(--primary)' }}>
+        <h3>Project Collaboration Requests</h3>
+        <p className="muted text-sm" style={{ margin: '0.25rem 0 1rem' }}>
+          Corporate partners requesting to sponsor and mentor specific university research projects.
+        </p>
+        {pendingCollabs.length === 0 ? (
+          <p className="muted text-sm" style={{ margin: 0 }}>No pending project collaboration requests.</p>
+        ) : (
+          <div className="col" style={{ gap: '1rem' }}>
+            {pendingCollabs.map(req => {
+              const compName = req.industry_partners?.company_name || req.company_name || 'Tata CleanTech Innovations';
+              const projTitle = req.projects?.title || req.project || 'University Research Project';
+              const compInd = req.industry_partners?.industry || 'Clean Energy & Water';
+              return (
+                <div key={req.id} className="card row between" style={{ background: 'var(--bg)', padding: '1rem' }}>
+                  <div>
+                    <span className="pill navy text-sm" style={{ marginBottom: '0.25rem' }}>Project: {projTitle}</span>
+                    <h4 style={{ margin: '0.25rem 0' }}>{compName}</h4>
+                    <span className="pill purple text-sm">{compInd}</span>
+                    <div className="text-sm muted" style={{ marginTop: '0.5rem' }}>
+                      Contact: {req.industry_partners?.contact_person || 'Liaison'} ({req.industry_partners?.email || 'email'})
+                    </div>
+                  </div>
+                  <div className="row" style={{ gap: '0.5rem' }}>
+                    <button className="btn sm" onClick={() => handleAcceptCollab(req.id)}>
+                      Accept Collaboration
+                    </button>
+                    <button className="btn ghost sm danger" onClick={() => handleRejectCollab(req.id)}>
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 2. Partner Registration Applications */}
       <div className="card" style={{ marginBottom: '2rem', padding: '1.5rem' }}>
-        <h3>Pending Partner Applications</h3>
+        <h3>Pending Partner Registration Applications</h3>
         {applications.length === 0 ? (
-          <p className="muted text-sm">No applications pending review.</p>
+          <p className="muted text-sm">No new partner applications pending review.</p>
         ) : (
           <div className="col" style={{ gap: '1rem', marginTop: '1rem' }}>
             {applications.map(app => (
@@ -1608,10 +1727,10 @@ export function UniIndustry() {
                   <span className="text-sm muted">Contact: {app.contact_person} ({app.email})</span>
                 </div>
                 <div className="row" style={{ gap: '0.5rem' }}>
-                  <button className="btn sm" onClick={() => handleApprove(app.id)}>
+                  <button className="btn sm" onClick={() => handleApproveApp(app.id)}>
                     Accept Partner
                   </button>
-                  <button className="btn ghost sm danger" onClick={() => handleReject(app.id)}>
+                  <button className="btn ghost sm danger" onClick={() => handleRejectApp(app.id)}>
                     Reject
                   </button>
                 </div>
@@ -1621,7 +1740,7 @@ export function UniIndustry() {
         )}
       </div>
 
-      {/* Approved Industry Partners */}
+      {/* 3. Approved Industry Partners */}
       <div className="card" style={{ padding: '1.5rem' }}>
         <h3>Approved Industry Partners</h3>
         <div className="grid" style={{ marginTop: '1rem' }}>

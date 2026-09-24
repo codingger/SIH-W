@@ -198,11 +198,17 @@ async function handleSubmit(event) {
                     <input
                         type="text"
                         name="district"
+                        list="district-list-submit"
                         value={formData.district}
                         onChange={handleChange}
-                        placeholder="Enter district"
+                        placeholder="Type or select district"
                         required
                     />
+                    <datalist id="district-list-submit">
+                        {['Ranchi', 'Dhanbad', 'Bokaro', 'Jamshedpur', 'East Singhbhum', 'West Singhbhum', 'Hazaribagh', 'Giridih', 'Deoghar', 'Palamu', 'Ramgarh', 'Chatra', 'Dumka', 'Garhwa', 'Godda', 'Gumla', 'Jamtara', 'Khunti', 'Koderma', 'Latehar', 'Lohardaga', 'Pakur', 'Sahibganj', 'Seraikela Kharsawan', 'Simdega'].map(d => (
+                            <option key={d} value={d} />
+                        ))}
+                    </datalist>
                 </div>
 
                 <br />

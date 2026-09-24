@@ -853,25 +853,45 @@ app.post("/challenges", upload.array("files"), async (req, res) => {
             district,
             area,
             affected_people,
+            affected_group,
             additional_info
         } = req.body;
 
         console.log("Received challenge body:", req.body);
         console.log("Files count:", req.files ? req.files.length : 0);
 
-        const { data: challenge, error } = await supabase
+        const insertPayload = {
+            title: title,
+            description: description,
+            category: category || "General",
+            district: district || "General",
+            area: area || "",
+            affected_people: affected_people ? parseInt(affected_people, 10) : 0,
+            additional_info: additional_info || ""
+        };
+
+        if (affected_group) {
+            insertPayload.affected_group = affected_group;
+        }
+
+        let { data: challenge, error } = await supabase
             .from("challenges")
-            .insert({
-                title: title,
-                description: description,
-                category: category || "General",
-                district: district || "General",
-                area: area || "",
-                affected_people: affected_people ? parseInt(affected_people, 10) : 0,
-                additional_info: additional_info || ""
-            })
+            .insert(insertPayload)
             .select()
             .single();
+
+        if (error && affected_group) {
+            // Fall back without affected_group if column is absent in Supabase challenges table
+            console.log("Retrying challenge insert without affected_group column:", error.message);
+            delete insertPayload.affected_group;
+            const retry = await supabase
+                .from("challenges")
+                .insert(insertPayload)
+                .select()
+                .single();
+            challenge = retry.data;
+            error = retry.error;
+        }
 
         if (error) {
             console.log("Challenge Insert Error:", error);
