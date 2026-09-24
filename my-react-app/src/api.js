@@ -11,7 +11,7 @@ import {
 const API_BASE = 'http://localhost:3000';
 const api = axios.create({
   baseURL: API_BASE,
-  timeout: 3500
+  timeout: 30000
 });
 
 // Local cache to ensure seamless zero-downtime offline experience
@@ -139,9 +139,13 @@ export async function createChallenge(formDataOrPayload, files = []) {
     if (!(formDataOrPayload instanceof FormData)) {
       const data = new FormData();
       Object.keys(formDataOrPayload).forEach(k => {
-        data.append(k, formDataOrPayload[k]);
+        if (formDataOrPayload[k] !== undefined && formDataOrPayload[k] !== null) {
+          data.append(k, formDataOrPayload[k]);
+        }
       });
-      files.forEach(f => data.append('files', f));
+      if (Array.isArray(files)) {
+        files.forEach(f => data.append('files', f));
+      }
       payload = data;
     }
     const res = await api.post('/challenges', payload);
@@ -153,9 +157,15 @@ export async function createChallenge(formDataOrPayload, files = []) {
   } catch (err) {
     console.warn('Backend POST /challenges failed, saving locally:', err.message);
   }
-  // Local fallback creation
+  // Local fallback creation if backend is offline
   const newId = Date.now();
   const raw = formDataOrPayload instanceof FormData ? Object.fromEntries(formDataOrPayload.entries()) : formDataOrPayload;
+  const fallbackMedia = (files || []).map((f, i) => ({
+    id: newId + i,
+    file_url: URL.createObjectURL(f),
+    file_type: f.type || 'image/jpeg'
+  }));
+
   const newC = normalizeChallenge({
     ...raw,
     id: newId,
@@ -163,6 +173,7 @@ export async function createChallenge(formDataOrPayload, files = []) {
     votes: 1,
     step: 0,
     status: 'Submitted',
+    media: fallbackMedia,
     created_at: new Date().toISOString()
   });
   localChallenges = [newC, ...localChallenges];

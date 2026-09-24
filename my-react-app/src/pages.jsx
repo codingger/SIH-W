@@ -379,21 +379,57 @@ export function Submit() {
     return Object.keys(err).length === 0;
   };
 
-  const handleNext = () => {
+  const handleNext = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (validateStep(step)) {
-      setStep(prev => prev + 1);
+      setStep(prev => Math.min(prev + 1, 3));
     }
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validateStep(step)) return;
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    // STRICT GUARD: Do not allow challenge submission unless on Step 3
+    if (step < 3) {
+      handleNext(e);
+      return;
+    }
+
+    if (!validateStep(1) || !validateStep(2)) {
+      setStep(1);
+      return;
+    }
+
+    if (submitting) return;
 
     setSubmitting(true);
-    const result = await createChallenge(form, files);
-    localStorage.removeItem('sih_challenge_draft');
-    setTrackingId(`SIP-${result.id ? String(result.id).slice(-6) : Math.floor(100000 + Math.random() * 900000)}`);
-    setSubmitting(false);
+    try {
+      const result = await createChallenge(form, files);
+      localStorage.removeItem('sih_challenge_draft');
+      setTrackingId(`SIP-${result.id ? String(result.id).slice(-6) : Math.floor(100000 + Math.random() * 900000)}`);
+    } catch (err) {
+      console.error('Challenge creation error:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleFileSelect = (e) => {
+    const selected = Array.from(e.target.files || []);
+    if (selected.length > 0) {
+      setFiles(prev => [...prev, ...selected]);
+    }
+    e.target.value = '';
+  };
+
+  const removeFile = (index) => {
+    setFiles(prev => prev.filter((_, idx) => idx !== index));
   };
 
   if (trackingId) {
@@ -554,47 +590,93 @@ export function Submit() {
             </div>
 
             <div className="form-field">
-              <label htmlFor="f-files">Upload Evidence Photos / Videos (Optional)</label>
+              <label htmlFor="f-files">Upload Evidence Photos / Videos (Saved to Supabase Storage)</label>
               <div className="card col center" style={{ border: '2px dashed var(--border)', background: 'var(--bg)', padding: '1.5rem', textAlign: 'center' }}>
                 <UploadCloud size={32} color="var(--primary)" aria-hidden="true" />
                 <p className="text-sm muted" style={{ margin: '0.5rem 0' }}>
-                  Drag & drop site photos or video clips here, or click to browse
+                  Click below to browse and attach site photos or videos
                 </p>
                 <input
                   id="f-files"
                   type="file"
                   multiple
                   accept="image/*,video/*"
-                  onChange={e => setFiles(Array.from(e.target.files))}
+                  onChange={handleFileSelect}
                   style={{ display: 'none' }}
                 />
                 <button type="button" className="btn ghost sm" onClick={() => document.getElementById('f-files').click()}>
-                  Select Files
+                  + Choose Photos / Videos
                 </button>
-                {files.length > 0 && (
-                  <span className="text-sm" style={{ marginTop: '0.75rem', fontWeight: 600, color: 'var(--info)' }}>
-                    {files.length} file(s) attached
-                  </span>
-                )}
               </div>
+
+              {files.length > 0 && (
+                <div style={{ marginTop: '1rem' }}>
+                  <div className="row between text-sm muted" style={{ marginBottom: '0.5rem' }}>
+                    <b>Attached Evidence Files ({files.length}):</b>
+                    <button type="button" className="util-btn" onClick={() => setFiles([])} style={{ color: 'var(--danger)' }}>
+                      Clear All
+                    </button>
+                  </div>
+                  <ul className="col" style={{ gap: '0.5rem', padding: 0, margin: 0, listStyle: 'none' }}>
+                    {files.map((file, idx) => (
+                      <li key={idx} className="row between card" style={{ padding: '0.5rem 0.75rem', background: 'var(--surface)' }}>
+                        <span className="text-sm row" style={{ gap: '0.5rem' }}>
+                          <FileText size={16} color="var(--primary)" />
+                          <b>{file.name}</b>
+                          <span className="muted">({(file.size / 1024).toFixed(1)} KB)</span>
+                        </span>
+                        <button type="button" className="util-btn" onClick={() => removeFile(idx)} aria-label="Remove file">
+                          ✕
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </>
         )}
 
         <div className="row between" style={{ marginTop: '2rem', borderTop: '1px solid var(--border)', paddingTop: '1.25rem' }}>
           {step > 1 ? (
-            <button type="button" className="btn ghost" onClick={() => setStep(prev => prev - 1)}>
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={(e) => {
+                e.preventDefault();
+                setStep(prev => prev - 1);
+              }}
+            >
               Back
             </button>
           ) : <span />}
 
           {step < 3 ? (
-            <button id="submit-step-next" type="button" className="btn" onClick={handleNext}>
+            <button
+              id="submit-step-next"
+              type="button"
+              className="btn"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleNext(e);
+              }}
+            >
               Continue to Step {step + 1}
               <ArrowRight size={16} aria-hidden="true" />
             </button>
           ) : (
-            <button id="submit-step-btn" type="submit" className="btn accent" disabled={submitting}>
+            <button
+              id="submit-step-btn"
+              type="button"
+              className="btn accent"
+              disabled={submitting}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleSubmit(e);
+              }}
+            >
               {submitting ? 'Submitting Report...' : 'Submit Challenge to Platform'}
             </button>
           )}

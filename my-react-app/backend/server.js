@@ -36,10 +36,13 @@ app.get("/", (req, res) => {
 
 app.get("/challenges", async (req, res) => {
     try {
+        if (!supabase) {
+            return res.status(200).json([]);
+        }
 
         const { data, error } = await supabase
             .from("challenges")
-            .select("*")
+            .select("*, challenge_media(*)")
             .order("created_at", { ascending: false });
 
         if (error) {
@@ -47,7 +50,12 @@ app.get("/challenges", async (req, res) => {
             return res.status(500).json(error);
         }
 
-        res.status(200).json(data);
+        const formatted = (data || []).map(c => ({
+            ...c,
+            media: c.challenge_media || []
+        }));
+
+        res.status(200).json(formatted);
 
     } catch (error) {
         console.log("SERVER ERROR:", error);
@@ -834,6 +842,10 @@ app.post("/users", async (req, res) => {
 
 app.post("/challenges", upload.array("files"), async (req, res) => {
     try {
+        if (!supabase) {
+            return res.status(500).json({ message: "Supabase client not initialized" });
+        }
+
         const {
             title,
             description,
@@ -844,70 +856,77 @@ app.post("/challenges", upload.array("files"), async (req, res) => {
             additional_info
         } = req.body;
 
-        console.log("Received:", req.body);
-        console.log("Files:", req.files);
+        console.log("Received challenge body:", req.body);
+        console.log("Files count:", req.files ? req.files.length : 0);
 
         const { data: challenge, error } = await supabase
             .from("challenges")
             .insert({
                 title: title,
                 description: description,
-                category: category,
-                district: district,
-                area: area,
-                affected_people: affected_people,
-                additional_info: additional_info
+                category: category || "General",
+                district: district || "General",
+                area: area || "",
+                affected_people: affected_people ? parseInt(affected_people, 10) : 0,
+                additional_info: additional_info || ""
             })
             .select()
             .single();
 
         if (error) {
-            console.log("Challenge Error:", error);
+            console.log("Challenge Insert Error:", error);
             return res.status(500).json(error);
         }
 
-        for (let i = 0; i < req.files.length; i++) {
+        const uploadedMedia = [];
 
-            const file = req.files[i];
+        if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+            for (let i = 0; i < req.files.length; i++) {
+                const file = req.files[i];
+                const cleanName = (file.originalname || "file").replace(/[^a-zA-Z0-9.-]/g, "_");
+                const filePath = `${challenge.id}/${Date.now()}-${i}-${cleanName}`;
 
-            const filePath =
-                `${challenge.id}/${Date.now()}-${i}-${file.originalname}`;
+                const { error: uploadError } = await supabase.storage
+                    .from("challenge-media")
+                    .upload(filePath, file.buffer, {
+                        contentType: file.mimetype
+                    });
 
+                if (uploadError) {
+                    console.log("Supabase Storage Upload Error:", uploadError);
+                    // Continue uploading remaining files if one fails
+                } else {
+                    const { data: urlData } = supabase.storage
+                        .from("challenge-media")
+                        .getPublicUrl(filePath);
 
-            const { error: uploadError } = await supabase.storage
-                .from("challenge-media")
-                .upload(filePath, file.buffer, {
-                    contentType: file.mimetype
-                });
+                    const { data: mediaRecord, error: mediaError } = await supabase
+                        .from("challenge_media")
+                        .insert({
+                            challenge_id: challenge.id,
+                            file_url: urlData.publicUrl,
+                            file_type: file.mimetype
+                        })
+                        .select()
+                        .single();
 
-            if (uploadError) {
-                console.log("Upload Error:", uploadError);
-                return res.status(500).json(uploadError);
-            }
-
-            const { data: urlData } = supabase.storage
-                .from("challenge-media")
-                .getPublicUrl(filePath);
-
-            const { error: mediaError } = await supabase
-                .from("challenge_media")
-                .insert({
-                    challenge_id: challenge.id,
-                    file_url: urlData.publicUrl,
-                    file_type: file.mimetype
-                });
-
-            if (mediaError) {
-                console.log("Media Error:", mediaError);
-                return res.status(500).json(mediaError);
+                    if (mediaError) {
+                        console.log("Challenge Media DB Error:", mediaError);
+                    } else if (mediaRecord) {
+                        uploadedMedia.push(mediaRecord);
+                    }
+                }
             }
         }
 
-        res.status(200).json(challenge);
+        res.status(200).json({
+            ...challenge,
+            media: uploadedMedia
+        });
 
     } catch (error) {
         console.log("SERVER ERROR:", error);
-        res.status(500).json(error);
+        res.status(500).json({ message: "Server error creating challenge", error: String(error) });
     }
 });
 
