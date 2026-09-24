@@ -1664,35 +1664,43 @@ export function UniIndustry() {
   };
 
   const pendingCollabs = collabRequests.filter(c => c.status === 'Requested');
+  const hasPending = pendingCollabs.length > 0 || applications.length > 0;
 
   return (
     <>
       <PageHead
         title="Industry Partners & Collaboration Hub"
-        subtitle="Manage incoming corporate sponsorship requests, partner applications, and verified enterprise research partners."
+        subtitle="Manage incoming corporate sponsorship requests and approved enterprise research partners."
       />
 
-      {/* 1. Project Collaboration Requests from Companies */}
+      {/* SINGLE UNIFIED PENDING REQUESTS SECTION */}
       <div className="card" style={{ marginBottom: '2rem', padding: '1.5rem', borderLeft: '4px solid var(--primary)' }}>
-        <h3>Project Collaboration Requests</h3>
+        <h3>Pending Industry Requests</h3>
         <p className="muted text-sm" style={{ margin: '0.25rem 0 1rem' }}>
-          Corporate partners requesting to sponsor and mentor specific university research projects.
+          Project sponsorship requests and new partner registration applications awaiting university review.
         </p>
-        {pendingCollabs.length === 0 ? (
-          <p className="muted text-sm" style={{ margin: 0 }}>No pending project collaboration requests.</p>
+
+        {!hasPending ? (
+          <p className="muted text-sm" style={{ margin: 0 }}>No pending industry or partner requests at this time.</p>
         ) : (
           <div className="col" style={{ gap: '1rem' }}>
+            {/* Project Collaboration Requests */}
             {pendingCollabs.map(req => {
               const compName = req.industry_partners?.company_name || req.company_name || 'Tata CleanTech Innovations';
               const projTitle = req.projects?.title || req.project || 'University Research Project';
               const compInd = req.industry_partners?.industry || 'Clean Energy & Water';
               return (
-                <div key={req.id} className="card row between" style={{ background: 'var(--bg)', padding: '1rem' }}>
+                <div key={`collab-${req.id}`} className="card row between" style={{ background: 'var(--bg)', padding: '1rem' }}>
                   <div>
-                    <span className="pill navy text-sm" style={{ marginBottom: '0.25rem' }}>Project: {projTitle}</span>
+                    <div className="row" style={{ gap: '0.5rem', marginBottom: '0.25rem' }}>
+                      <span className="pill navy text-sm">Project Sponsorship Request</span>
+                      <span className="pill purple text-sm">{compInd}</span>
+                    </div>
                     <h4 style={{ margin: '0.25rem 0' }}>{compName}</h4>
-                    <span className="pill purple text-sm">{compInd}</span>
-                    <div className="text-sm muted" style={{ marginTop: '0.5rem' }}>
+                    <p className="text-sm muted" style={{ margin: '0.25rem 0' }}>
+                      <b>Target Project:</b> {projTitle}
+                    </p>
+                    <div className="text-sm muted">
                       Contact: {req.industry_partners?.contact_person || 'Liaison'} ({req.industry_partners?.email || 'email'})
                     </div>
                   </div>
@@ -1707,22 +1715,16 @@ export function UniIndustry() {
                 </div>
               );
             })}
-          </div>
-        )}
-      </div>
 
-      {/* 2. Partner Registration Applications */}
-      <div className="card" style={{ marginBottom: '2rem', padding: '1.5rem' }}>
-        <h3>Pending Partner Registration Applications</h3>
-        {applications.length === 0 ? (
-          <p className="muted text-sm">No new partner applications pending review.</p>
-        ) : (
-          <div className="col" style={{ gap: '1rem', marginTop: '1rem' }}>
+            {/* Partner Registration Applications */}
             {applications.map(app => (
-              <div key={app.id} className="card row between" style={{ background: 'var(--bg)', padding: '1rem' }}>
+              <div key={`app-${app.id}`} className="card row between" style={{ background: 'var(--bg)', padding: '1rem' }}>
                 <div>
-                  <h4 style={{ margin: 0 }}>{app.company_name}</h4>
-                  <span className="pill purple text-sm" style={{ margin: '0.25rem 0' }}>{app.industry}</span>
+                  <div className="row" style={{ gap: '0.5rem', marginBottom: '0.25rem' }}>
+                    <span className="pill amber text-sm">Partner Registration Application</span>
+                    <span className="pill purple text-sm">{app.industry}</span>
+                  </div>
+                  <h4 style={{ margin: '0.25rem 0' }}>{app.company_name}</h4>
                   <p className="muted text-sm" style={{ margin: '0.25rem 0' }}>{app.description}</p>
                   <span className="text-sm muted">Contact: {app.contact_person} ({app.email})</span>
                 </div>
@@ -1731,7 +1733,7 @@ export function UniIndustry() {
                     Accept Partner
                   </button>
                   <button className="btn ghost sm danger" onClick={() => handleRejectApp(app.id)}>
-                    Reject
+                    Decline
                   </button>
                 </div>
               </div>
@@ -1740,7 +1742,7 @@ export function UniIndustry() {
         )}
       </div>
 
-      {/* 3. Approved Industry Partners */}
+      {/* Approved Industry Partners */}
       <div className="card" style={{ padding: '1.5rem' }}>
         <h3>Approved Industry Partners</h3>
         <div className="grid" style={{ marginTop: '1rem' }}>
