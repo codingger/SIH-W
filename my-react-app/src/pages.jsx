@@ -328,7 +328,7 @@ export function Submit() {
     title: '',
     description: '',
     category: 'Water',
-    district: 'Ranchi',
+    district: '',
     area: '',
     affected_group: 'Community',
     affected_people: '',
@@ -338,14 +338,104 @@ export function Submit() {
   const [errors, setErrors] = useState({});
   const [trackingId, setTrackingId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [detectingLoc, setDetectingLoc] = useState(false);
+  const [locMsg, setLocMsg] = useState('');
+  const [locSuccess, setLocSuccess] = useState(false);
 
-  // Autosave draft recovery
+  const detectLocation = () => {
+    if (!navigator.geolocation) {
+      setLocMsg('Geolocation is not supported by your browser.');
+      setLocSuccess(false);
+      return;
+    }
+
+    setDetectingLoc(true);
+    setLocMsg('Requesting location permission...');
+    setLocSuccess(false);
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setLocMsg('Permission granted! Auto-filling your location...');
+
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
+          );
+          const data = await res.json();
+          const addr = data.address || {};
+
+          let detectedDistrict =
+            addr.state_district ||
+            addr.county ||
+            addr.city ||
+            addr.district ||
+            '';
+          detectedDistrict = detectedDistrict.replace(/\s*(District|Zilla|Pargana)\s*/gi, '').trim();
+
+          const detectedArea =
+            addr.suburb ||
+            addr.village ||
+            addr.town ||
+            addr.hamlet ||
+            addr.neighbourhood ||
+            addr.road ||
+            addr.residential ||
+            '';
+
+          setForm(prev => {
+            const updated = {
+              ...prev,
+              district: detectedDistrict || prev.district,
+              area: detectedArea ? `${detectedArea}` : (prev.area || 'Detected Locality'),
+              additional_info: prev.additional_info
+                ? `${prev.additional_info}\n[GPS Coordinates: ${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°]`
+                : `[GPS Coordinates: ${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°]`
+            };
+            try {
+              localStorage.setItem('sih_challenge_draft', JSON.stringify(updated));
+            } catch {
+              // ignore
+            }
+            return updated;
+          });
+
+          setLocMsg(`Location detected: ${detectedDistrict ? detectedDistrict + ', ' : ''}${detectedArea || 'Area auto-filled'} (${latitude.toFixed(3)}°, ${longitude.toFixed(3)}°)`);
+          setLocSuccess(true);
+        } catch (err) {
+          setForm(prev => ({
+            ...prev,
+            additional_info: prev.additional_info
+              ? `${prev.additional_info}\n[GPS Coordinates: ${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°]`
+              : `[GPS Coordinates: ${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°]`
+          }));
+          setLocMsg(`GPS coordinates retrieved (${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°). Form auto-tagged.`);
+          setLocSuccess(true);
+        } finally {
+          setDetectingLoc(false);
+        }
+      },
+      (err) => {
+        setDetectingLoc(false);
+        setLocSuccess(false);
+        if (err.code === 1) {
+          setLocMsg('Location permission denied. Please select or type your district manually below.');
+        } else if (err.code === 2) {
+          setLocMsg('Location unavailable. Please select or type your district manually below.');
+        } else if (err.code === 3) {
+          setLocMsg('Location request timed out. Please select or type your district manually below.');
+        } else {
+          setLocMsg('Unable to retrieve location. Please type your details manually.');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
+  // Ensure form starts completely clean on mount
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('sih_challenge_draft');
-      if (saved) {
-        setForm(prev => ({ ...prev, ...JSON.parse(saved) }));
-      }
+      localStorage.removeItem('sih_challenge_draft');
     } catch {
       // ignore
     }
@@ -524,6 +614,32 @@ export function Submit() {
 
         {step === 2 && (
           <>
+            <div className="card" style={{ background: 'var(--bg)', padding: '1.25rem', marginBottom: '1.5rem', border: '1px solid var(--border)' }}>
+              <div className="row between">
+                <div className="row" style={{ gap: '0.6rem' }}>
+                  <MapPin size={22} color="var(--primary)" aria-hidden="true" />
+                  <div>
+                    <h4 style={{ margin: 0 }}>Auto-Detect My Location</h4>
+                    <span className="text-sm muted">Ask browser permission to auto-fill District & Locality</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  onClick={detectLocation}
+                  disabled={detectingLoc}
+                >
+                  {detectingLoc ? 'Detecting...' : '📍 Use Current Location'}
+                </button>
+              </div>
+
+              {locMsg && (
+                <div className="text-sm" style={{ marginTop: '0.75rem', fontWeight: 600, color: locSuccess ? 'var(--success)' : 'var(--danger)' }}>
+                  {locMsg}
+                </div>
+              )}
+            </div>
+
             <div className="form-field">
               <label htmlFor="f-district">District *</label>
               <input
@@ -804,6 +920,58 @@ export function ChallengeDetail({ portal }) {
               <p className="muted text-sm" style={{ margin: 0 }}>{challenge.additional_info}</p>
             </div>
           )}
+
+          {/* Submitted Media Evidence Gallery */}
+          <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border)', paddingTop: '1.25rem' }}>
+            <h3 style={{ marginBottom: '1rem' }}>Submitted Evidence & Media</h3>
+            {challenge.media && challenge.media.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1rem' }}>
+                {challenge.media.map((m, idx) => {
+                  const isVideo = m.file_type?.startsWith('video/') || (m.file_url && m.file_url.match(/\.(mp4|webm|ogg)$/i));
+                  return (
+                    <div key={m.id || idx} className="card" style={{ padding: '0.5rem', background: 'var(--bg)', overflow: 'hidden' }}>
+                      {isVideo ? (
+                        <video
+                          src={m.file_url}
+                          controls
+                          style={{ width: '100%', height: '180px', objectFit: 'cover', borderRadius: '6px' }}
+                        />
+                      ) : (
+                        <img
+                          src={m.file_url}
+                          alt={`Evidence photo ${idx + 1}`}
+                          style={{ width: '100%', height: '180px', objectFit: 'cover', borderRadius: '6px', cursor: 'pointer' }}
+                          onClick={() => window.open(m.file_url, '_blank')}
+                        />
+                      )}
+                      <div className="row between" style={{ padding: '0.5rem 0.25rem 0.25rem 0.25rem' }}>
+                        <span className="text-sm muted">{isVideo ? '📹 Video Evidence' : `📷 Photo Evidence ${idx + 1}`}</span>
+                        {!isVideo && (
+                          <a href={m.file_url} target="_blank" rel="noopener noreferrer" className="text-sm link">
+                            View Full →
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : challenge.image_url ? (
+              <div style={{ maxWidth: '450px' }}>
+                <img
+                  src={challenge.image_url}
+                  alt="Challenge evidence"
+                  style={{ width: '100%', maxHeight: '280px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border)' }}
+                />
+              </div>
+            ) : (
+              <div className="card" style={{ background: 'var(--bg)', padding: '1rem' }}>
+                <p className="muted text-sm" style={{ margin: 0 }}>
+                  No photos or video files were uploaded when this challenge was reported.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1149,6 +1317,7 @@ export function ProjectsPage({ role = 'university' }) {
 export function ProjectDetailView({ role = 'university' }) {
   const { id } = useParams();
   const [project, setProject] = useState(null);
+  const [challenge, setChallenge] = useState(null);
   const [teams, setTeams] = useState([]);
   const [projectCollabs, setProjectCollabs] = useState([]);
   const [showCollabModal, setShowCollabModal] = useState(false);
@@ -1158,7 +1327,15 @@ export function ProjectDetailView({ role = 'university' }) {
   const isCompany = role === 'company';
 
   const loadProjectData = () => {
-    getProject(id).then(setProject);
+    getProject(id).then(p => {
+      setProject(p);
+      if (p) {
+        const challengeId = p.challenge_id || p.id;
+        getChallenge(challengeId).then(c => {
+          if (c) setChallenge(c);
+        });
+      }
+    });
     getTeams().then(all => {
       setTeams(all.filter(t => String(t.project_id) === String(id)));
     });
@@ -1222,6 +1399,94 @@ export function ProjectDetailView({ role = 'university' }) {
         <div className="row" style={{ marginTop: '1.5rem', gap: '0.5rem' }}>
           {(project.tags || []).map(t => <span key={t} className="pill grey">{t}</span>)}
         </div>
+      </div>
+
+      {/* Original Community Problem & Evidence Media Gallery */}
+      <div className="card" style={{ marginBottom: '1.5rem', padding: '1.75rem' }}>
+        <div className="row between" style={{ marginBottom: '1rem' }}>
+          <h3>Original Community Problem & Evidence Media</h3>
+          {challenge?.id && (
+            <Link className="btn ghost sm" to={`/challenges/${challenge.id}`}>
+              View Full Challenge Entry →
+            </Link>
+          )}
+        </div>
+
+        {challenge ? (
+          <div className="col" style={{ gap: '1rem' }}>
+            <div className="row muted text-sm" style={{ gap: '1.25rem', flexWrap: 'wrap' }}>
+              {challenge.district && (
+                <span className="row" style={{ gap: '0.35rem' }}>
+                  <MapPin size={16} aria-hidden="true" />
+                  <b>Location:</b> {challenge.area ? `${challenge.area}, ` : ''}{challenge.district}
+                </span>
+              )}
+              {(challenge.affected_people || challenge.affected) && (
+                <span className="row" style={{ gap: '0.35rem' }}>
+                  <Users size={16} aria-hidden="true" />
+                  <b>Affected Citizens:</b> {(challenge.affected_people || challenge.affected || 0).toLocaleString()}
+                </span>
+              )}
+              {(challenge.supporters || challenge.votes) && (
+                <span className="row" style={{ gap: '0.35rem' }}>
+                  <ThumbsUp size={16} aria-hidden="true" />
+                  <b>Community Votes:</b> {challenge.supporters || challenge.votes}
+                </span>
+              )}
+            </div>
+
+            <p style={{ margin: 0, lineHeight: 1.6 }}>
+              {challenge.description || challenge.desc || project.description || project.desc}
+            </p>
+
+            {/* Media Gallery */}
+            <div style={{ marginTop: '0.5rem' }}>
+              <h4 style={{ fontSize: '0.9375rem', marginBottom: '0.75rem' }}>Submitted Photo & Media Evidence</h4>
+              {challenge.media && challenge.media.length > 0 ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem' }}>
+                  {challenge.media.map((m, idx) => {
+                    const isVideo = m.file_type?.startsWith('video/') || (m.file_url && m.file_url.match(/\.(mp4|webm|ogg)$/i));
+                    return (
+                      <div key={m.id || idx} className="card" style={{ padding: '0.5rem', background: 'var(--bg)', overflow: 'hidden' }}>
+                        {isVideo ? (
+                          <video
+                            src={m.file_url}
+                            controls
+                            style={{ width: '100%', height: '160px', objectFit: 'cover', borderRadius: '6px' }}
+                          />
+                        ) : (
+                          <img
+                            src={m.file_url}
+                            alt={`Evidence photo ${idx + 1}`}
+                            style={{ width: '100%', height: '160px', objectFit: 'cover', borderRadius: '6px', cursor: 'pointer' }}
+                            onClick={() => window.open(m.file_url, '_blank')}
+                          />
+                        )}
+                        <p className="text-sm muted" style={{ margin: '0.35rem 0 0 0', textAlign: 'center' }}>
+                          {isVideo ? 'Video Evidence' : `Photo Evidence ${idx + 1}`}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : challenge.image_url ? (
+                <div style={{ maxWidth: '400px' }}>
+                  <img
+                    src={challenge.image_url}
+                    alt="Challenge evidence"
+                    style={{ width: '100%', maxHeight: '240px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border)' }}
+                  />
+                </div>
+              ) : (
+                <p className="muted text-sm" style={{ margin: 0 }}>
+                  No photos or video files attached to this challenge report.
+                </p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p className="muted text-sm">Community challenge evidence details loaded directly from reported challenge.</p>
+        )}
       </div>
 
       {/* Teams Assigned */}

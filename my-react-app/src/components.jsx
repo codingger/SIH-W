@@ -24,7 +24,7 @@ import {
   ShieldCheck,
   AlertCircle
 } from 'lucide-react';
-import { STEPS, TRANSLATIONS } from './data.js';
+import { STEPS, TRANSLATIONS } from './constants.js';
 import { supportChallenge, getCurrentUser, logoutUser } from './api.js';
 
 export const Emblem = ({ size = 44 }) => (

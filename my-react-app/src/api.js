@@ -6,7 +6,7 @@ import {
   INITIAL_TEAMS,
   INITIAL_PARTNERS,
   INITIAL_APPLICATIONS
-} from './data.js';
+} from './constants.js';
 
 const API_BASE = 'http://localhost:3000';
 const api = axios.create({
