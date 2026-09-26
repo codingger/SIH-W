@@ -617,10 +617,12 @@ tr:hover td {
 .modal-box {
   background-color: var(--surface);
   border-radius: var(--radius-card);
-  max-width: 540px;
+  max-width: 580px;
   width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
   box-shadow: var(--shadow-modal);
-  padding: 1.5rem;
+  padding: 1.75rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;

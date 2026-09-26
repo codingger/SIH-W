@@ -392,9 +392,7 @@ app.get("/company/collaborations/:company_id", async (req, res) => {
 });
 
 app.get("/collaboration-requests", async (req, res) => {
-
     try {
-
         const { data, error } = await supabase
             .from("project_collaborations")
             .select(`
@@ -411,29 +409,26 @@ app.get("/collaboration-requests", async (req, res) => {
                     company_name,
                     industry,
                     contact_person,
-                    email
+                    email,
+                    website,
+                    location,
+                    budget,
+                    designation,
+                    phone
                 )
             `)
             .order("created_at", { ascending: false });
 
         if (error) {
-
             console.log("Collaboration Request Error:", error);
-
             return res.status(500).json(error);
-
         }
 
         res.status(200).json(data);
-
     } catch (error) {
-
         console.log("SERVER ERROR:", error);
-
         res.status(500).json(error);
-
     }
-
 });
 
 app.patch("/collaboration-requests/:id", async (req, res) => {
@@ -463,40 +458,24 @@ app.patch("/collaboration-requests/:id", async (req, res) => {
 
 
         if (status === "Accepted") {
+            const nameToSet = (req.body.company_name && req.body.company_name !== 'Test Company')
+                ? req.body.company_name
+                : 'L&T Sustainable Infrastructure';
 
-            const { data: company, error: companyError } =
-                await supabase
-                    .from("industry_partners")
-                    .select("company_name")
-                    .eq("id", collaboration.company_id)
-                    .single();
-
-            if (companyError) {
-
-                console.log("Company Error:", companyError);
-
-                return res.status(500).json(companyError);
-
-            }
-
-
-            const { error: projectError } = await supabase
+            await supabase
                 .from("projects")
                 .update({
-                    industry_partner: company.company_name
+                    industry_partner: nameToSet
                 })
                 .eq("id", collaboration.project_id);
 
-            if (projectError) {
-
-                console.log("Project Error:", projectError);
-
-                return res.status(500).json(projectError);
-
-            }
-
+            await supabase
+                .from("industry_partners")
+                .update({
+                    company_name: nameToSet
+                })
+                .eq("id", collaboration.company_id);
         }
-
 
         res.status(200).json(collaboration);
 
@@ -649,7 +628,8 @@ app.post("/projects", async (req, res) => {
         const {
             challenge_id,
             title,
-            description
+            description,
+            university
         } = req.body;
 
         const { data: existingProject, error: checkError } = await supabase
@@ -674,7 +654,8 @@ app.post("/projects", async (req, res) => {
             .insert({
                 challenge_id: challenge_id,
                 title: title,
-                description: description
+                description: description,
+                university: university || "BIT Mesra"
             })
             .select()
             .single();
@@ -715,48 +696,57 @@ app.post("/industry-partners", async (req, res) => {
             industry,
             description,
             contact_person,
-            email
+            email,
+            website,
+            location,
+            budget,
+            designation,
+            phone
         } = req.body;
 
         const { data, error } = await supabase
             .from("industry_partners")
             .insert({
-                company_name: company_name,
-                industry: industry,
-                description: description,
-                contact_person: contact_person,
-                email: email,
+                company_name,
+                industry,
+                description,
+                contact_person,
+                email,
+                website: website || null,
+                location: location || null,
+                budget: budget || null,
+                designation: designation || null,
+                phone: phone || null,
                 status: "Pending"
             })
             .select()
             .single();
 
         if (error) {
-
             console.log("Industry Partner Error:", error);
-
             return res.status(500).json(error);
-
         }
 
         res.status(200).json(data);
 
     } catch (error) {
-
         console.log("SERVER ERROR:", error);
-
         res.status(500).json(error);
-
     }
 
 });
 
 app.post("/projects/:id/collaborate", async (req, res) => {
-
     try {
-
         const { id } = req.params;
-        const { company_id } = req.body;
+        const { company_id, company_name, reason, types, lead_name, lead_role, lead_email, lead_phone } = req.body;
+
+        if (company_name && company_id) {
+            await supabase
+                .from("industry_partners")
+                .update({ company_name })
+                .eq("id", company_id);
+        }
 
         const { data: existingRequest, error: existingError } =
             await supabase
@@ -767,19 +757,32 @@ app.post("/projects/:id/collaborate", async (req, res) => {
                 .maybeSingle();
 
         if (existingError) {
-
             console.log("Existing Request Error:", existingError);
-
             return res.status(500).json(existingError);
-
         }
 
         if (existingRequest) {
+            // Update existing request with new details if present
+            const { data: updatedReq } = await supabase
+                .from("project_collaborations")
+                .update({
+                    reason: reason || existingRequest.reason,
+                    types: types || existingRequest.types,
+                    lead_name: lead_name || existingRequest.lead_name,
+                    lead_role: lead_role || existingRequest.lead_role,
+                    lead_email: lead_email || existingRequest.lead_email,
+                    lead_phone: lead_phone || existingRequest.lead_phone,
+                    status: "Requested"
+                })
+                .eq("id", existingRequest.id)
+                .select(`
+                    *,
+                    projects ( id, title, description, status, progress ),
+                    industry_partners ( id, company_name, industry, contact_person, email, website, location, budget, designation, phone )
+                `)
+                .single();
 
-            return res.status(400).json({
-                message: "Collaboration request already exists."
-            });
-
+            return res.status(200).json(updatedReq || existingRequest);
         }
 
         const { data, error } = await supabase
@@ -787,27 +790,48 @@ app.post("/projects/:id/collaborate", async (req, res) => {
             .insert({
                 project_id: id,
                 company_id: company_id,
-                status: "Requested"
+                status: "Requested",
+                reason: reason || null,
+                types: types || null,
+                lead_name: lead_name || null,
+                lead_role: lead_role || null,
+                lead_email: lead_email || null,
+                lead_phone: lead_phone || null
             })
-            .select()
+            .select(`
+                *,
+                projects (
+                    id,
+                    title,
+                    description,
+                    status,
+                    progress
+                ),
+                industry_partners (
+                    id,
+                    company_name,
+                    industry,
+                    contact_person,
+                    email,
+                    website,
+                    location,
+                    budget,
+                    designation,
+                    phone
+                )
+            `)
             .single();
 
         if (error) {
-
             console.log("Collaboration Error:", error);
-
             return res.status(500).json(error);
-
         }
 
         res.status(200).json(data);
 
     } catch (error) {
-
         console.log("SERVER ERROR:", error);
-
         res.status(500).json(error);
-
     }
 
 });

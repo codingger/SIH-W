@@ -206,9 +206,10 @@ export async function getProject(id) {
   return normalizeProject(match) || null;
 }
 
-export async function takeUpChallenge({ challenge_id, title, description }) {
+export async function takeUpChallenge({ challenge_id, title, description, university }) {
+  const chosenUni = university || 'BIT Mesra';
   try {
-    const res = await api.post('/projects', { challenge_id, title, description });
+    const res = await api.post('/projects', { challenge_id, title, description, university: chosenUni });
     if (res.data) {
       const newProj = normalizeProject(res.data);
       localProjects = [newProj, ...localProjects];
@@ -224,7 +225,7 @@ export async function takeUpChallenge({ challenge_id, title, description }) {
     challenge_id,
     title,
     description,
-    university: 'University Portal User',
+    university: chosenUni,
     status: 'Taken Up',
     progress: 10,
     tags: ['Community Problem', 'Active']
@@ -265,35 +266,72 @@ export async function createTeam(teamData) {
 export async function getCompanyCollaborations(companyId = 4) {
   try {
     const res = await api.get(`/company/collaborations/${companyId}`);
-    if (Array.isArray(res.data) && res.data.length > 0) {
-      localCollabs = res.data;
-      return localCollabs;
+    if (Array.isArray(res.data)) {
+      if (res.data.length > 0) {
+        const backendIds = new Set(res.data.map(d => String(d.id)));
+        const combined = [...res.data, ...localCollabs.filter(l => !backendIds.has(String(l.id)) && String(l.company_id || 4) === String(companyId))];
+        localCollabs = combined;
+        return combined;
+      }
+      return localCollabs.filter(c => String(c.company_id || 4) === String(companyId));
     }
   } catch (err) {
     console.warn('Backend /company/collaborations unavailable:', err.message);
   }
-  return localCollabs;
+  return localCollabs.filter(c => String(c.company_id || 4) === String(companyId));
 }
 
 export async function requestCollaboration(projectId, companyId = 4, details = {}) {
+  const user = getCurrentUser();
+  const activeCo = details.company_name || user?.institutionName || localStorage.getItem('selectedCompany') || 'L&T Sustainable Infrastructure';
+
   try {
-    const res = await api.post(`/projects/${projectId}/collaborate`, { company_id: companyId, ...details });
+    localStorage.setItem(`collab_sent_${companyId}_${projectId}`, 'true');
+  } catch (e) { }
+
+  try {
+    const res = await api.post(`/projects/${projectId}/collaborate`, { company_id: companyId, company_name: activeCo, ...details });
     if (res.data) {
-      localCollabs = [res.data, ...localCollabs];
-      return res.data;
+      const dataWithCo = {
+        ...res.data,
+        company_name: activeCo,
+        industry_partners: {
+          ...(res.data.industry_partners || {}),
+          company_name: activeCo
+        }
+      };
+      localCollabs = [dataWithCo, ...localCollabs.filter(c => !(String(c.project_id) === String(projectId) && String(c.company_id || 4) === String(companyId)))];
+      return dataWithCo;
     }
   } catch (err) {
+    if (err.response && err.response.status === 400) {
+      console.warn('Backend collaboration request already exists.');
+      const existing = localCollabs.find(c => String(c.project_id) === String(projectId));
+      if (existing) return existing;
+    }
     console.warn('Backend collaborate failed, saving locally:', err.message);
   }
+
+  const existingLocal = localCollabs.find(c => String(c.project_id) === String(projectId) && String(c.company_id || 4) === String(companyId));
+  if (existingLocal) {
+    return existingLocal;
+  }
+
   const project = localProjects.find(p => String(p.id) === String(projectId));
   const newC = {
     id: Date.now(),
     project_id: projectId,
     company_id: companyId,
+    company_name: activeCo,
     status: 'Requested',
     date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
     project: project?.title || 'Civic Technology Project',
-    projects: project || { title: 'Civic Technology Project', status: 'In Progress', progress: 30 }
+    projects: project || { title: 'Civic Technology Project', status: 'In Progress', progress: 30 },
+    industry_partners: {
+      id: companyId,
+      company_name: activeCo,
+      industry: 'Infrastructure & Engineering'
+    }
   };
   localCollabs = [newC, ...localCollabs];
   return newC;
@@ -303,7 +341,9 @@ export async function getCollaborationRequests() {
   try {
     const res = await api.get('/collaboration-requests');
     if (Array.isArray(res.data) && res.data.length > 0) {
-      return res.data;
+      const backendIds = new Set(res.data.map(d => String(d.id)));
+      const combined = [...res.data, ...localCollabs.filter(l => !backendIds.has(String(l.id)))];
+      return combined;
     }
   } catch (err) {
     console.warn('Backend /collaboration-requests unavailable:', err.message);
@@ -387,13 +427,15 @@ export async function applyIndustryPartner(data) {
   return newApp;
 }
 
-export async function loginUser(email, password, role) {
+export async function loginUser(email, password, role, institutionName) {
+  const nameToUse = institutionName || (role === 'university' ? (localStorage.getItem('selectedUniversity') || 'BIT Mesra') : role === 'company' ? (localStorage.getItem('selectedCompany') || 'Tata CleanTech Innovations') : 'Citizen User');
   try {
-    const res = await api.post('/login', { email, password, role });
+    const res = await api.post('/login', { email, password, role, institutionName: nameToUse });
     if (res.data) {
-      localStorage.setItem('user', JSON.stringify(res.data));
-      localStorage.setItem('sih_user', JSON.stringify(res.data));
-      return res.data;
+      const uData = { ...res.data, institutionName: nameToUse };
+      localStorage.setItem('user', JSON.stringify(uData));
+      localStorage.setItem('sih_user', JSON.stringify(uData));
+      return uData;
     }
   } catch (err) {
     console.warn('Backend login failed, using simulated auth session:', err.message);
@@ -401,7 +443,8 @@ export async function loginUser(email, password, role) {
   // Simulated fallback user session
   const simUser = {
     id: 100,
-    name: email.split('@')[0] || 'User',
+    name: nameToUse,
+    institutionName: nameToUse,
     email,
     role: role || 'citizen'
   };

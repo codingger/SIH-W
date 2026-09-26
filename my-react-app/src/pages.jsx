@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ListChecks,
   Flag,
@@ -822,15 +822,27 @@ export function ChallengeDetail({ portal }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [challenge, setChallenge] = useState(null);
+  const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [takingUp, setTakingUp] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
 
-  useEffect(() => {
+  const user = getCurrentUser();
+  const activeUni = user?.institutionName || localStorage.getItem('selectedUniversity') || 'BIT Mesra';
+
+  const loadData = () => {
     getChallenge(id).then(c => {
       setChallenge(c);
       setLoading(false);
     });
+    getProjects().then(projs => {
+      const match = (projs || []).find(p => String(p.challenge_id) === String(id) || String(p.id) === String(id));
+      if (match) setProject(match);
+    });
+  };
+
+  useEffect(() => {
+    loadData();
   }, [id]);
 
   const handleAdopt = async () => {
@@ -839,9 +851,11 @@ export function ChallengeDetail({ portal }) {
     await takeUpChallenge({
       challenge_id: challenge.id,
       title: challenge.title,
-      description: challenge.description || challenge.desc
+      description: challenge.description || challenge.desc,
+      university: activeUni
     });
-    setToastMsg('Challenge adopted! Creating your university project...');
+    setToastMsg(`Challenge adopted by ${activeUni}! Creating your university project...`);
+    loadData();
     setTimeout(() => {
       navigate('/university/projects');
     }, 1200);
@@ -861,7 +875,8 @@ export function ChallengeDetail({ portal }) {
     );
   }
 
-  const isAdopted = challenge.step >= 2 || challenge.status === 'Taken Up';
+  const isAdopted = challenge.step >= 2 || challenge.status === 'Taken Up' || !!project;
+  const universityDisplay = project?.university || project?.uni || challenge?.university || activeUni;
 
   return (
     <>
@@ -991,8 +1006,8 @@ export function ChallengeDetail({ portal }) {
               A team of faculty researchers and student innovators are currently developing the prototype solution.
             </p>
             <div className="row" style={{ gap: '0.5rem' }}>
-              <span className="pill navy">BIT Mesra Lab</span>
-              <span className="pill teal">In Active Development</span>
+              <span className="pill navy">{universityDisplay}</span>
+              <span className="pill teal">{project?.status || 'In Active Development'}</span>
             </div>
           </div>
         ) : (
@@ -1111,17 +1126,21 @@ export function CitizenTrack() {
 export function UniDash() {
   const [challenges, setChallenges] = useState([]);
   const [projects, setProjects] = useState([]);
+  const user = getCurrentUser();
+  const activeUni = user?.institutionName || localStorage.getItem('selectedUniversity') || 'BIT Mesra';
 
   useEffect(() => {
     getChallenges().then(setChallenges);
     getProjects().then(setProjects);
   }, []);
 
+  const myProjects = projects.filter(p => (p.university || p.uni) === activeUni);
+
   return (
     <>
       <PageHead
-        title="University Research Dashboard"
-        subtitle="Welcome, Faculty & Innovation Cell Members. Manage adopted challenges and student R&D teams."
+        title={`${activeUni} — Research Dashboard`}
+        subtitle={`Welcome, ${activeUni} Faculty & Innovation Cell Members. Manage adopted challenges and student R&D teams.`}
         action={
           <Link className="btn accent sm" to="/university/challenges">
             Explore Open Challenges
@@ -1133,7 +1152,7 @@ export function UniDash() {
       <div className="stats-grid" style={{ marginBottom: '2rem' }}>
         <StatCard label="Total Challenges Available" value={challenges.length} Icon={ListChecks} />
         <StatCard label="High Priority Needs" value={challenges.filter(c => (c.supporters || c.votes || 0) >= 10).length} Icon={Flag} />
-        <StatCard label="Active University Projects" value={projects.length} Icon={FolderKanban} />
+        <StatCard label={`${activeUni} Active Projects`} value={myProjects.length > 0 ? myProjects.length : projects.length} Icon={FolderKanban} />
         <StatCard label="Industry Collaborations" value="9" Icon={Handshake} />
       </div>
 
@@ -1282,17 +1301,26 @@ export function UniChallenges() {
 // ==========================================
 export function ProjectsPage({ role = 'university' }) {
   const [projects, setProjects] = useState([]);
+  const [scopeFilter, setScopeFilter] = useState('mine');
   const isUni = role === 'university';
+  const user = getCurrentUser();
+  const activeInst = user?.institutionName || (isUni ? (localStorage.getItem('selectedUniversity') || 'BIT Mesra') : (localStorage.getItem('selectedCompany') || 'Tata CleanTech Innovations'));
 
   useEffect(() => {
     getProjects().then(setProjects);
   }, []);
 
+  const myProjects = isUni
+    ? projects.filter(p => (p.university || p.uni) === activeInst)
+    : projects.filter(p => p.industry_partner === activeInst);
+
+  const displayedProjects = scopeFilter === 'mine' ? (myProjects.length > 0 ? myProjects : projects) : projects;
+
   return (
     <>
       <PageHead
-        title={isUni ? 'University Adopted Projects' : 'Industry Project Marketplace'}
-        subtitle={isUni ? 'Active research projects addressing community challenges.' : 'Discover high-impact university tech projects looking for mentorship, CSR, or fabrication partnerships.'}
+        title={isUni ? `${activeInst} — Adopted Projects` : `${activeInst} — Project Marketplace`}
+        subtitle={isUni ? `Active research projects adopted by ${activeInst}.` : `Discover high-impact university tech projects available for sponsorship with ${activeInst}.`}
         action={
           isUni ? (
             <Link className="btn accent sm" to="/university/challenges">
@@ -1302,8 +1330,26 @@ export function ProjectsPage({ role = 'university' }) {
         }
       />
 
+      {/* Scope Filter Tabs */}
+      <div className="row" style={{ gap: '0.5rem', marginBottom: '1.5rem' }}>
+        <button
+          className={`pill ${scopeFilter === 'mine' ? 'navy' : 'grey'}`}
+          onClick={() => setScopeFilter('mine')}
+          style={{ cursor: 'pointer', border: 'none' }}
+        >
+          {isUni ? `Adopted by ${activeInst} (${myProjects.length})` : `Sponsored by ${activeInst} (${myProjects.length})`}
+        </button>
+        <button
+          className={`pill ${scopeFilter === 'all' ? 'navy' : 'grey'}`}
+          onClick={() => setScopeFilter('all')}
+          style={{ cursor: 'pointer', border: 'none' }}
+        >
+          All Platform Projects ({projects.length})
+        </button>
+      </div>
+
       <div className="grid">
-        {projects.map(p => (
+        {displayedProjects.map(p => (
           <ProjectCard key={p.id} p={p} to={`/${role}/projects/${p.id}`} />
         ))}
       </div>
@@ -1324,6 +1370,10 @@ export function ProjectDetailView({ role = 'university' }) {
   const [collabSent, setCollabSent] = useState(false);
   const [collabReason, setCollabReason] = useState('');
   const [supportTypes, setSupportTypes] = useState(['Technical Mentorship']);
+  const [collabLeadName, setCollabLeadName] = useState('');
+  const [collabLeadRole, setCollabLeadRole] = useState('Senior Project Lead');
+  const [collabLeadEmail, setCollabLeadEmail] = useState('');
+  const [collabLeadPhone, setCollabLeadPhone] = useState('');
   const isCompany = role === 'company';
 
   const loadProjectData = () => {
@@ -1339,8 +1389,34 @@ export function ProjectDetailView({ role = 'university' }) {
     getTeams().then(all => {
       setTeams(all.filter(t => String(t.project_id) === String(id)));
     });
-    getCollaborationRequests().then(all => {
-      setProjectCollabs((all || []).filter(c => String(c.project_id) === String(id)));
+
+    Promise.all([
+      getCollaborationRequests(),
+      getCompanyCollaborations(4)
+    ]).then(([allRequests, companyCollabs]) => {
+      const collabs = (allRequests || []).filter(c => String(c.project_id) === String(id));
+      setProjectCollabs(collabs);
+
+      if (isCompany) {
+        let isSent = false;
+        try {
+          if (localStorage.getItem(`collab_sent_4_${id}`) === 'true') {
+            isSent = true;
+          }
+        } catch (e) { }
+
+        if (!isSent && Array.isArray(companyCollabs)) {
+          isSent = companyCollabs.some(c => String(c.project_id || c.projects?.id) === String(id));
+        }
+
+        if (!isSent && Array.isArray(collabs)) {
+          isSent = collabs.some(c => String(c.company_id) === '4' || String(c.industry_partners?.id) === '4');
+        }
+
+        if (isSent) {
+          setCollabSent(true);
+        }
+      }
     });
   };
 
@@ -1349,9 +1425,23 @@ export function ProjectDetailView({ role = 'university' }) {
   }, [id]);
 
   const handleSendCollab = async () => {
-    await requestCollaboration(id, 4, { reason: collabReason, types: supportTypes });
+    const user = getCurrentUser();
+    const activeCo = user?.institutionName || localStorage.getItem('selectedCompany') || 'L&T Sustainable Infrastructure';
+    try {
+      localStorage.setItem(`collab_sent_4_${id}`, 'true');
+    } catch (e) { }
+    await requestCollaboration(id, 4, {
+      company_name: activeCo,
+      reason: collabReason,
+      types: supportTypes,
+      lead_name: collabLeadName || 'Rahul Gupta',
+      lead_role: collabLeadRole || 'Senior Project Lead',
+      lead_email: collabLeadEmail || 'rahul.gupta@company.com',
+      lead_phone: collabLeadPhone || '+91 98765 43210'
+    });
     setCollabSent(true);
     setShowCollabModal(false);
+    loadProjectData();
   };
 
   const handleAcceptProjectCollab = async (collabId) => {
@@ -1553,8 +1643,10 @@ export function ProjectDetailView({ role = 'university' }) {
             <h4 style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>Incoming Sponsorship Requests for this Project</h4>
             <div className="col" style={{ gap: '0.75rem' }}>
               {pendingCollabs.map(req => {
-                const compName = req.industry_partners?.company_name || req.company_name || 'Tata CleanTech Innovations';
-                const compInd = req.industry_partners?.industry || 'Clean Tech';
+                const compName = (req.industry_partners?.company_name && req.industry_partners.company_name !== 'Test Company')
+                  ? req.industry_partners.company_name
+                  : (req.company_name || localStorage.getItem('selectedCompany') || 'L&T Sustainable Infrastructure');
+                const compInd = req.industry_partners?.industry || 'Infrastructure & Clean Tech';
                 return (
                   <div key={req.id} className="card row between" style={{ background: 'var(--bg)', padding: '1rem' }}>
                     <div>
@@ -1581,19 +1673,72 @@ export function ProjectDetailView({ role = 'university' }) {
       {/* Collab Request Modal */}
       {showCollabModal && (
         <div className="modal-backdrop">
-          <div className="modal-box">
-            <h3>Request Collaboration</h3>
-            <p className="muted text-sm">
-              Connect directly with the university team on <b>{project.title}</b>.
+          <div className="modal-box" style={{ maxWidth: 580, maxHeight: '85vh', overflowY: 'auto' }}>
+            <h3>Request Collaboration & Assign Project Lead</h3>
+            <p className="muted text-sm" style={{ marginBottom: '0.75rem' }}>
+              Assign a dedicated project engineer, mentor, or lead from your company to collaborate on <b>{project.title}</b>.
             </p>
 
+            <h4 style={{ fontSize: '0.9375rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>
+              Project Lead / Dedicated Contact Details
+            </h4>
+
+            <div className="row" style={{ gap: '0.75rem' }}>
+              <div className="form-field" style={{ flex: 1 }}>
+                <label>Project Lead Name *</label>
+                <input
+                  className="input"
+                  required
+                  placeholder="e.g. Rahul Gupta"
+                  value={collabLeadName}
+                  onChange={e => setCollabLeadName(e.target.value)}
+                />
+              </div>
+
+              <div className="form-field" style={{ flex: 1 }}>
+                <label>Role / Designation *</label>
+                <input
+                  className="input"
+                  required
+                  placeholder="e.g. Senior Field Engineer"
+                  value={collabLeadRole}
+                  onChange={e => setCollabLeadRole(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="row" style={{ gap: '0.75rem' }}>
+              <div className="form-field" style={{ flex: 1 }}>
+                <label>Direct Lead Email *</label>
+                <input
+                  type="email"
+                  className="input"
+                  required
+                  placeholder="rahul.gupta@company.com"
+                  value={collabLeadEmail}
+                  onChange={e => setCollabLeadEmail(e.target.value)}
+                />
+              </div>
+
+              <div className="form-field" style={{ flex: 1 }}>
+                <label>Direct Mobile / Phone</label>
+                <input
+                  type="tel"
+                  className="input"
+                  placeholder="+91 98765 43210"
+                  value={collabLeadPhone}
+                  onChange={e => setCollabLeadPhone(e.target.value)}
+                />
+              </div>
+            </div>
+
             <div className="form-field">
-              <label htmlFor="collab-why">Why would your company like to collaborate?</label>
+              <label htmlFor="collab-why">Project Execution Plan & Proposal Note *</label>
               <textarea
                 id="collab-why"
                 className="textarea"
-                rows={3}
-                placeholder="Mention how your expertise or CSR can accelerate this project..."
+                rows={2}
+                placeholder="Mention how your expertise or CSR will accelerate this project..."
                 value={collabReason}
                 onChange={e => setCollabReason(e.target.value)}
               />
@@ -1601,9 +1746,9 @@ export function ProjectDetailView({ role = 'university' }) {
 
             <div className="form-field">
               <label>Support Types Offered</label>
-              <div className="col" style={{ gap: '0.5rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.5rem' }}>
                 {['Technical Mentorship', 'Sensor & Hardware Resources', 'Testing & Fabrication', 'CSR Funding', 'Pilot Deployment'].map(type => (
-                  <label key={type} className="row" style={{ gap: '0.5rem', cursor: 'pointer' }}>
+                  <label key={type} className="row" style={{ gap: '0.5rem', cursor: 'pointer', background: 'var(--bg)', padding: '0.4rem 0.6rem', borderRadius: '4px' }}>
                     <input
                       type="checkbox"
                       checked={supportTypes.includes(type)}
@@ -1612,18 +1757,30 @@ export function ProjectDetailView({ role = 'university' }) {
                         else setSupportTypes(supportTypes.filter(x => x !== type));
                       }}
                     />
-                    <span>{type}</span>
+                    <span className="text-sm">{type}</span>
                   </label>
                 ))}
               </div>
             </div>
 
-            <div className="row between" style={{ marginTop: '1rem' }}>
-              <button className="btn ghost" onClick={() => setShowCollabModal(false)}>
+            {/* Sticky Action Footer */}
+            <div
+              className="row between"
+              style={{
+                marginTop: '1rem',
+                paddingTop: '0.875rem',
+                borderTop: '1px solid var(--border)',
+                position: 'sticky',
+                bottom: -1,
+                background: 'var(--surface)',
+                zIndex: 10
+              }}
+            >
+              <button className="btn ghost" type="button" onClick={() => setShowCollabModal(false)}>
                 Cancel
               </button>
-              <button className="btn accent" onClick={handleSendCollab}>
-                Send Request
+              <button className="btn accent" type="button" onClick={handleSendCollab} style={{ padding: '0.65rem 1.25rem', fontWeight: 600 }}>
+                Submit Collaboration Request
               </button>
             </div>
           </div>
@@ -1929,7 +2086,9 @@ export function UniIndustry() {
   };
 
   const pendingCollabs = collabRequests.filter(c => c.status === 'Requested');
-  const hasPending = pendingCollabs.length > 0 || applications.length > 0;
+  const acceptedCollabs = collabRequests.filter(c => c.status === 'Accepted');
+  const pendingApps = applications.filter(a => a.status === 'Pending');
+  const hasPending = pendingCollabs.length > 0 || pendingApps.length > 0;
 
   return (
     <>
@@ -1951,25 +2110,41 @@ export function UniIndustry() {
           <div className="col" style={{ gap: '1rem' }}>
             {/* Project Collaboration Requests */}
             {pendingCollabs.map(req => {
-              const compName = req.industry_partners?.company_name || req.company_name || 'Tata CleanTech Innovations';
+              const compName = (req.industry_partners?.company_name && req.industry_partners.company_name !== 'Test Company')
+                ? req.industry_partners.company_name
+                : (req.company_name || localStorage.getItem('selectedCompany') || 'L&T Sustainable Infrastructure');
               const projTitle = req.projects?.title || req.project || 'University Research Project';
               const compInd = req.industry_partners?.industry || 'Clean Energy & Water';
+              const leadName = req.lead_name || 'Rahul Gupta';
+              const leadRole = req.lead_role || 'Senior Project Lead';
+              const leadEmail = req.lead_email || 'rahul.gupta@company.com';
+              const leadPhone = req.lead_phone || '+91 98765 43210';
               return (
-                <div key={`collab-${req.id}`} className="card row between" style={{ background: 'var(--bg)', padding: '1rem' }}>
-                  <div>
-                    <div className="row" style={{ gap: '0.5rem', marginBottom: '0.25rem' }}>
+                <div key={`collab-${req.id}`} className="card row between" style={{ background: 'var(--bg)', padding: '1.25rem' }}>
+                  <div style={{ flex: 1 }}>
+                    <div className="row" style={{ gap: '0.5rem', marginBottom: '0.35rem' }}>
                       <span className="pill navy text-sm">Project Sponsorship Request</span>
                       <span className="pill purple text-sm">{compInd}</span>
                     </div>
-                    <h4 style={{ margin: '0.25rem 0' }}>{compName}</h4>
-                    <p className="text-sm muted" style={{ margin: '0.25rem 0' }}>
-                      <b>Target Project:</b> {projTitle}
+                    <h4 style={{ margin: '0.25rem 0', fontSize: '1.1rem' }}>{compName}</h4>
+                    <p className="text-sm" style={{ margin: '0.25rem 0', color: 'var(--primary)' }}>
+                      <b>Target Project to Back:</b> {projTitle}
                     </p>
-                    <div className="text-sm muted">
-                      Contact: {req.industry_partners?.contact_person || 'Liaison'} ({req.industry_partners?.email || 'email'})
+                    {req.reason && (
+                      <p className="text-sm muted" style={{ margin: '0.35rem 0', fontStyle: 'italic' }}>
+                        <b>Proposal Plan:</b> "{req.reason}"
+                      </p>
+                    )}
+                    {req.types && Array.isArray(req.types) && (
+                      <div className="row" style={{ gap: '0.35rem', flexWrap: 'wrap', margin: '0.35rem 0' }}>
+                        {req.types.map(t => <span key={t} className="pill grey text-sm">{t}</span>)}
+                      </div>
+                    )}
+                    <div className="text-sm muted" style={{ marginTop: '0.5rem', borderTop: '1px dashed var(--border)', paddingTop: '0.5rem' }}>
+                      <b>Dedicated Project Lead / Mentor:</b> {leadName} ({leadRole}) · Email: <b>{leadEmail}</b> · Phone: <b>{leadPhone}</b>
                     </div>
                   </div>
-                  <div className="row" style={{ gap: '0.5rem' }}>
+                  <div className="row" style={{ gap: '0.5rem', alignSelf: 'flex-start' }}>
                     <button className="btn sm" onClick={() => handleAcceptCollab(req.id)}>
                       Accept Collaboration
                     </button>
@@ -1982,18 +2157,26 @@ export function UniIndustry() {
             })}
 
             {/* Partner Registration Applications */}
-            {applications.map(app => (
-              <div key={`app-${app.id}`} className="card row between" style={{ background: 'var(--bg)', padding: '1rem' }}>
-                <div>
-                  <div className="row" style={{ gap: '0.5rem', marginBottom: '0.25rem' }}>
+            {pendingApps.map(app => (
+              <div key={`app-${app.id}`} className="card row between" style={{ background: 'var(--bg)', padding: '1.25rem' }}>
+                <div style={{ flex: 1 }}>
+                  <div className="row" style={{ gap: '0.5rem', marginBottom: '0.35rem' }}>
                     <span className="pill amber text-sm">Partner Registration Application</span>
                     <span className="pill purple text-sm">{app.industry}</span>
+                    {app.budget && <span className="pill teal text-sm">CSR Budget: {app.budget}</span>}
                   </div>
-                  <h4 style={{ margin: '0.25rem 0' }}>{app.company_name}</h4>
-                  <p className="muted text-sm" style={{ margin: '0.25rem 0' }}>{app.description}</p>
-                  <span className="text-sm muted">Contact: {app.contact_person} ({app.email})</span>
+                  <h4 style={{ margin: '0.25rem 0', fontSize: '1.1rem' }}>{app.company_name}</h4>
+                  {app.website && (
+                    <a className="text-sm" href={app.website} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', display: 'block', marginBottom: '0.25rem' }}>
+                      🌐 {app.website} {app.location ? `· 📍 ${app.location}` : ''}
+                    </a>
+                  )}
+                  <p className="muted text-sm" style={{ margin: '0.35rem 0' }}><b>CSR & R&D Overview:</b> {app.description}</p>
+                  <div className="text-sm muted" style={{ borderTop: '1px dashed var(--border)', paddingTop: '0.5rem' }}>
+                    <b>Corporate Primary Liaison:</b> {app.contact_person} {app.designation ? `(${app.designation})` : ''} · Email: <b>{app.email}</b> {app.phone ? `· Phone: ${app.phone}` : ''}
+                  </div>
                 </div>
-                <div className="row" style={{ gap: '0.5rem' }}>
+                <div className="row" style={{ gap: '0.5rem', alignSelf: 'flex-start' }}>
                   <button className="btn sm" onClick={() => handleApproveApp(app.id)}>
                     Accept Partner
                   </button>
@@ -2007,20 +2190,71 @@ export function UniIndustry() {
         )}
       </div>
 
-      {/* Approved Industry Partners */}
+      {/* Approved Industry Partners & Active Collaborations */}
       <div className="card" style={{ padding: '1.5rem' }}>
-        <h3>Approved Industry Partners</h3>
+        <h3>Approved Industry Partners & Active Collaborations</h3>
+        <p className="muted text-sm" style={{ margin: '0.25rem 0 1rem' }}>
+          Companies actively backing university research projects with technical mentorship, equipment, or funding.
+        </p>
+
         <div className="grid" style={{ marginTop: '1rem' }}>
-          {partners.map(p => (
-            <div key={p.id} className="card col" style={{ gap: '0.5rem' }}>
-              <h4 style={{ margin: 0 }}>{p.company_name}</h4>
-              <span className="pill purple" style={{ width: 'fit-content' }}>{p.industry}</span>
-              <p className="muted text-sm" style={{ margin: 0 }}>{p.description}</p>
-              <div className="muted text-sm" style={{ marginTop: 'auto', borderTop: '1px solid var(--border)', paddingTop: '0.5rem' }}>
-                <b>Liaison:</b> {p.contact_person} · {p.email}
+          {/* Base Partners */}
+          {partners.map(p => {
+            const pName = (p.company_name && p.company_name !== 'Test Company') ? p.company_name : (localStorage.getItem('selectedCompany') || 'L&T Sustainable Infrastructure');
+            return (
+              <div key={p.id} className="card col" style={{ gap: '0.5rem' }}>
+                <div className="row between">
+                  <h4 style={{ margin: 0 }}>{pName}</h4>
+                  <span className="pill green text-sm">Verified Partner</span>
+                </div>
+                <span className="pill purple" style={{ width: 'fit-content' }}>{p.industry}</span>
+                {p.website && <span className="text-sm muted">🌐 {p.website}</span>}
+                <p className="muted text-sm" style={{ margin: 0 }}>{p.description}</p>
+                {p.budget && <div className="text-sm muted"><b>Grant Budget:</b> {p.budget}</div>}
+                <div className="muted text-sm" style={{ marginTop: 'auto', borderTop: '1px solid var(--border)', paddingTop: '0.5rem' }}>
+                  <b>Corporate Liaison:</b> {p.contact_person} {p.designation ? `(${p.designation})` : ''} · {p.email}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
+
+          {/* Accepted Collaboration Requests */}
+          {acceptedCollabs.map(c => {
+            const compName = (c.industry_partners?.company_name && c.industry_partners.company_name !== 'Test Company')
+              ? c.industry_partners.company_name
+              : (c.company_name || localStorage.getItem('selectedCompany') || 'L&T Sustainable Infrastructure');
+            const projTitle = c.projects?.title || c.project || 'Active Research Project';
+            const compInd = c.industry_partners?.industry || 'Clean Energy & Infrastructure';
+            const leadName = c.lead_name || 'Rahul Gupta';
+            const leadRole = c.lead_role || 'Senior Project Lead';
+            const leadEmail = c.lead_email || 'rahul.gupta@company.com';
+            const leadPhone = c.lead_phone || '+91 98765 43210';
+            return (
+              <div key={`accepted-collab-${c.id}`} className="card col" style={{ gap: '0.5rem', borderLeft: '4px solid var(--success)' }}>
+                <div className="row between">
+                  <h4 style={{ margin: 0 }}>{compName}</h4>
+                  <span className="pill green text-sm">Active Sponsor</span>
+                </div>
+                <span className="pill purple" style={{ width: 'fit-content' }}>{compInd}</span>
+                <p className="text-sm" style={{ margin: '0.25rem 0' }}>
+                  <b>Sponsoring Project:</b> {projTitle}
+                </p>
+                {c.reason && (
+                  <p className="muted text-sm" style={{ margin: 0 }}>
+                    <b>Proposal Note:</b> "{c.reason}"
+                  </p>
+                )}
+                {c.types && Array.isArray(c.types) && (
+                  <div className="row" style={{ gap: '0.35rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+                    {c.types.map(t => <span key={t} className="pill grey text-sm">{t}</span>)}
+                  </div>
+                )}
+                <div className="muted text-sm" style={{ marginTop: 'auto', borderTop: '1px solid var(--border)', paddingTop: '0.5rem' }}>
+                  <b>Project Lead:</b> {leadName} ({leadRole}) · {leadEmail} · {leadPhone}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </>
@@ -2139,22 +2373,26 @@ export function UniReports() {
 export function CoDash() {
   const [projects, setProjects] = useState([]);
   const [collabs, setCollabs] = useState([]);
+  const user = getCurrentUser();
+  const activeCo = user?.institutionName || localStorage.getItem('selectedCompany') || 'Tata CleanTech Innovations';
 
   useEffect(() => {
     getProjects().then(setProjects);
     getCompanyCollaborations(4).then(setCollabs);
   }, []);
 
+  const myCollaborations = projects.filter(p => p.industry_partner === activeCo);
+
   return (
     <>
       <PageHead
-        title="Industry Partner Dashboard"
-        subtitle="Sponsor, mentor and deploy high-impact civic technologies created by university teams."
+        title={`${activeCo} — Industry Dashboard`}
+        subtitle={`Welcome, ${activeCo} Enterprise Portal. Sponsor, mentor and deploy high-impact civic technologies created by university teams.`}
       />
 
       <div className="stats-grid" style={{ marginBottom: '2rem' }}>
-        <StatCard label="Available Projects" value={projects.length} Icon={FolderKanban} />
-        <StatCard label="My Active Collaborations" value={collabs.filter(c => c.status === 'Accepted').length} Icon={Handshake} />
+        <StatCard label="Platform Projects" value={projects.length} Icon={FolderKanban} />
+        <StatCard label={`${activeCo} Collaborations`} value={myCollaborations.length > 0 ? myCollaborations.length : collabs.filter(c => c.status === 'Accepted').length} Icon={Handshake} />
         <StatCard label="Pending Partnership Requests" value={collabs.filter(c => c.status === 'Requested').length} Icon={Clock} />
       </div>
 
@@ -2226,9 +2464,14 @@ export function CoApply() {
   const [form, setForm] = useState({
     company_name: '',
     industry: 'Clean Energy & Water',
+    website: '',
+    location: '',
     description: '',
+    budget: '₹25L - ₹1 Cr / year',
     contact_person: '',
-    email: ''
+    designation: 'Head of CSR & R&D',
+    email: '',
+    phone: ''
   });
   const [submitted, setSubmitted] = useState(false);
 
@@ -2244,7 +2487,7 @@ export function CoApply() {
         <CheckCircle2 size={48} color="var(--success)" />
         <h2>Application Submitted</h2>
         <p className="muted">
-          Your company application has been sent for platform verification. Once approved, you can sponsor and mentor university projects.
+          Your company application has been sent for platform verification. Once approved, your enterprise profile will be visible to university teams for mentorship & funding.
         </p>
         <Link className="btn" to="/company">Go to Industry Dashboard</Link>
       </div>
@@ -2252,46 +2495,85 @@ export function CoApply() {
   }
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto' }}>
+    <div style={{ maxWidth: 720, margin: '0 auto' }}>
       <PageHead
         title="Register as Industry Innovation Partner"
         subtitle="Join our network of forward-thinking corporate, CSR and R&D partners."
       />
 
       <form className="card" onSubmit={handleSubmit} style={{ padding: '1.75rem' }}>
-        <div className="form-field">
-          <label>Company / Organization Name *</label>
-          <input className="input" required value={form.company_name} onChange={e => setForm({ ...form, company_name: e.target.value })} />
-        </div>
+        <div className="row" style={{ gap: '1rem' }}>
+          <div className="form-field" style={{ flex: 1 }}>
+            <label>Company / Organization Name *</label>
+            <input className="input" required value={form.company_name} onChange={e => setForm({ ...form, company_name: e.target.value })} placeholder="e.g. Larsen & Toubro Sustainable Infra" />
+          </div>
 
-        <div className="form-field">
-          <label>Industry Domain *</label>
-          <select className="select" value={form.industry} onChange={e => setForm({ ...form, industry: e.target.value })}>
-            {['Clean Energy & Water', 'Agriculture & Logistics', 'Healthcare & Biotech', 'Civil & Materials', 'IoT & IT Systems'].map(ind => (
-              <option key={ind} value={ind}>{ind}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="form-field">
-          <label>Company Focus & CSR Overview *</label>
-          <textarea className="textarea" rows={3} required value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+          <div className="form-field" style={{ flex: 1 }}>
+            <label>Industry Domain *</label>
+            <select className="select" value={form.industry} onChange={e => setForm({ ...form, industry: e.target.value })}>
+              {['Clean Energy & Water', 'Agriculture & Logistics', 'Healthcare & Biotech', 'Civil & Materials', 'IoT & IT Systems', 'Defense & Aerospace'].map(ind => (
+                <option key={ind} value={ind}>{ind}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="row" style={{ gap: '1rem' }}>
           <div className="form-field" style={{ flex: 1 }}>
-            <label>Contact Person *</label>
-            <input className="input" required value={form.contact_person} onChange={e => setForm({ ...form, contact_person: e.target.value })} />
+            <label>Official Corporate Website</label>
+            <input className="input" value={form.website} onChange={e => setForm({ ...form, website: e.target.value })} placeholder="https://www.company.com" />
           </div>
 
           <div className="form-field" style={{ flex: 1 }}>
-            <label>Official Email *</label>
-            <input type="email" className="input" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+            <label>Headquarters Location</label>
+            <input className="input" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} placeholder="e.g. Mumbai, MH" />
+          </div>
+        </div>
+
+        <div className="form-field">
+          <label>Company Focus & CSR Overview *</label>
+          <textarea className="textarea" rows={3} required value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Detail your corporate R&D focus, CSR initiatives, and domain expertise..." />
+        </div>
+
+        <div className="form-field">
+          <label>Annual CSR / Innovation Grant Budget</label>
+          <select className="select" value={form.budget} onChange={e => setForm({ ...form, budget: e.target.value })}>
+            {['< ₹10 Lakhs / year', '₹10L - ₹25L / year', '₹25L - ₹1 Cr / year', '₹1 Cr+ / year'].map(b => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
+        </div>
+
+        <h4 style={{ margin: '1.25rem 0 0.5rem 0', fontSize: '1rem', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
+          Primary Corporate Contact & Liaison
+        </h4>
+
+        <div className="row" style={{ gap: '1rem' }}>
+          <div className="form-field" style={{ flex: 1 }}>
+            <label>Liaison Contact Person *</label>
+            <input className="input" required value={form.contact_person} onChange={e => setForm({ ...form, contact_person: e.target.value })} placeholder="Full Name" />
+          </div>
+
+          <div className="form-field" style={{ flex: 1 }}>
+            <label>Designation / Title</label>
+            <input className="input" value={form.designation} onChange={e => setForm({ ...form, designation: e.target.value })} placeholder="e.g. VP - Corporate Alliances" />
+          </div>
+        </div>
+
+        <div className="row" style={{ gap: '1rem' }}>
+          <div className="form-field" style={{ flex: 1 }}>
+            <label>Official Corporate Email *</label>
+            <input type="email" className="input" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="corporate@company.com" />
+          </div>
+
+          <div className="form-field" style={{ flex: 1 }}>
+            <label>Office Contact Phone</label>
+            <input type="tel" className="input" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="+91 98765 43210" />
           </div>
         </div>
 
         <button type="submit" className="btn accent" style={{ marginTop: '1rem' }}>
-          Submit Partner Application
+          Submit Partner Registration Application
         </button>
       </form>
     </div>
@@ -2302,51 +2584,232 @@ export function CoApply() {
 // AUTH: LOGIN & REGISTER
 // ==========================================
 export function Login() {
-  const [role, setRole] = useState('citizen');
+  const [searchParams] = useSearchParams();
+  const initialRole = searchParams.get('role') || 'citizen';
+  const isRequired = searchParams.get('required') === '1';
+
+  const [role, setRole] = useState(initialRole);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [universityName, setUniversityName] = useState(
+    localStorage.getItem('selectedUniversity') || 'BIT Mesra'
+  );
+  const [companyName, setCompanyName] = useState(
+    localStorage.getItem('selectedCompany') || 'Tata CleanTech Innovations'
+  );
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
+  useEffect(() => {
+    const r = searchParams.get('role');
+    if (r) setRole(r);
+  }, [searchParams]);
+
+  const defaultUniversities = [
+    'BIT Mesra',
+    'IIT (ISM) Dhanbad',
+    'NIT Jamshedpur',
+    'Ranchi University',
+    'Tata Institute of Social Sciences'
+  ];
+
+  const defaultCompanies = [
+    'Tata CleanTech Innovations',
+    'AgriTech Solutions',
+    'L&T Sustainable Infrastructure',
+    'Jindal Clean Energy',
+    'Reliance Foundation Tech'
+  ];
+
   const handleLogin = async (e) => {
-    e.preventDefault();
-    if (!email || !password) {
-      setError('Please fill in both email and password.');
-      return;
+    e?.preventDefault();
+    const loginEmail = email || (role === 'university' ? 'research@university.edu.in' : role === 'company' ? 'contact@cleantech.com' : 'user@domain.gov.in');
+    const loginPw = password || 'password123';
+    let instName = '';
+
+    if (role === 'university') {
+      instName = universityName || 'BIT Mesra';
+      localStorage.setItem('selectedUniversity', instName);
+      localStorage.setItem('activeInstitution', instName);
+    } else if (role === 'company') {
+      instName = companyName || 'Tata CleanTech Innovations';
+      localStorage.setItem('selectedCompany', instName);
+      localStorage.setItem('activeInstitution', instName);
     }
-    await loginUser(email, password, role);
+
+    await loginUser(loginEmail, loginPw, role, instName);
     if (role === 'university') navigate('/university');
     else if (role === 'company') navigate('/company');
     else navigate('/');
   };
 
-  return (
-    <div style={{ maxWidth: 460, margin: '2rem auto' }}>
-      <form className="card" onSubmit={handleLogin} style={{ padding: '2rem' }}>
-        <h1 style={{ fontSize: '1.75rem', marginBottom: '0.25rem', textAlign: 'center' }}>Portal Login</h1>
-        <p className="muted text-sm" style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-          Sign in to your designated civic, research, or enterprise portal
-        </p>
+  const handleQuickUniSelect = (uni) => {
+    setUniversityName(uni);
+    setEmail(`research@${uni.toLowerCase().replace(/[^a-z0-9]/g, '')}.edu.in`);
+    setPassword('password123');
+  };
 
-        {/* Role Select Cards */}
-        <div role="radiogroup" aria-label="Portal Role" className="row" style={{ gap: '0.5rem', marginBottom: '1.5rem' }}>
-          {[
-            { id: 'citizen', label: 'Citizen' },
-            { id: 'university', label: 'University' },
-            { id: 'company', label: 'Industry' }
-          ].map(r => (
-            <button
-              key={r.id}
-              type="button"
-              className={`btn sm ${role === r.id ? '' : 'ghost'}`}
-              style={{ flex: 1 }}
-              onClick={() => setRole(r.id)}
-            >
-              {r.label}
-            </button>
-          ))}
+  const handleQuickCoSelect = (co) => {
+    setCompanyName(co);
+    setEmail(`contact@${co.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`);
+    setPassword('password123');
+  };
+
+  const getPortalMeta = () => {
+    if (role === 'university') {
+      return {
+        icon: '🏛️',
+        title: 'University & R&D Portal Login',
+        subtitle: 'Sign in as a higher education lab or faculty mentor to adopt community challenges.',
+        activeLabel: `Selected University: ${universityName || 'BIT Mesra'}`,
+        badgeClass: 'navy'
+      };
+    }
+    if (role === 'company') {
+      return {
+        icon: '🏢',
+        title: 'Industry Partner Login',
+        subtitle: 'Sign in as a corporate enterprise to sponsor university prototypes and offer grants.',
+        activeLabel: `Selected Company: ${companyName || 'Tata CleanTech Innovations'}`,
+        badgeClass: 'teal'
+      };
+    }
+    return {
+      icon: '👥',
+      title: 'Citizen & Community Login',
+      subtitle: 'Sign in to report societal challenges, track progress, and vote for local priorities.',
+      activeLabel: '',
+      badgeClass: 'grey'
+    };
+  };
+
+  const meta = getPortalMeta();
+
+  return (
+    <div style={{ maxWidth: 520, margin: '2rem auto' }}>
+      <form className="card" onSubmit={handleLogin} style={{ padding: '2rem' }}>
+        {isRequired && (
+          <div className="card" style={{ background: 'color-mix(in srgb, var(--accent) 12%, var(--surface))', borderColor: 'var(--accent)', padding: '1rem', marginBottom: '1.25rem' }}>
+            <div className="row" style={{ gap: '0.5rem', fontWeight: 600, color: 'var(--accent)' }}>
+              <span>🔒 Authentication Compulsory</span>
+            </div>
+            <p className="text-sm muted" style={{ margin: '0.35rem 0 0 0', lineHeight: 1.4 }}>
+              Access to the {role === 'university' ? 'University Research Portal' : 'Industry Partner Portal'} requires logging in with a {role === 'university' ? 'University' : 'Corporate'} profile.
+            </p>
+          </div>
+        )}
+        <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
+          <span style={{ fontSize: '2rem' }}>{meta.icon}</span>
+          <h1 style={{ fontSize: '1.75rem', margin: '0.35rem 0' }}>{meta.title}</h1>
+          <p className="muted text-sm" style={{ margin: 0, lineHeight: 1.5 }}>
+            {meta.subtitle}
+          </p>
         </div>
+
+        {/* Role Selection Tabs (Only displayed on general public login) */}
+        {!searchParams.has('role') && (
+          <div role="radiogroup" aria-label="Portal Role" className="row" style={{ gap: '0.5rem', marginBottom: '1.5rem' }}>
+            {[
+              { id: 'citizen', label: '👥 Citizen' },
+              { id: 'university', label: '🏛️ University' },
+              { id: 'company', label: '🏢 Industry' }
+            ].map(r => (
+              <button
+                key={r.id}
+                type="button"
+                className={`btn sm ${role === r.id ? '' : 'ghost'}`}
+                style={{ flex: 1 }}
+                onClick={() => {
+                  setRole(r.id);
+                  setError('');
+                }}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* University Profile Selector */}
+        {role === 'university' && (
+          <div className="card" style={{ background: 'var(--bg)', padding: '1.25rem', marginBottom: '1.25rem', border: '1px solid var(--border)' }}>
+            <div className="row between" style={{ marginBottom: '0.75rem' }}>
+              <span className="text-sm" style={{ fontWeight: 600 }}>University Institution Profile</span>
+              <span className="pill navy text-sm">{universityName || 'BIT Mesra'}</span>
+            </div>
+
+            <p className="muted text-sm" style={{ marginBottom: '0.75rem' }}>
+              Quick select a university for testing or type a custom institution name below:
+            </p>
+
+            <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
+              {defaultUniversities.map(u => (
+                <button
+                  key={u}
+                  type="button"
+                  className={`pill ${universityName === u ? 'navy' : 'grey'}`}
+                  style={{ cursor: 'pointer', border: 'none' }}
+                  onClick={() => handleQuickUniSelect(u)}
+                >
+                  {universityName === u ? `✓ ${u}` : u}
+                </button>
+              ))}
+            </div>
+
+            <div className="form-field" style={{ marginBottom: 0 }}>
+              <label htmlFor="login-uni-custom" style={{ fontSize: '0.85rem', fontWeight: 600 }}>University / College Name (Editable)</label>
+              <input
+                id="login-uni-custom"
+                type="text"
+                className="input"
+                value={universityName}
+                onChange={e => setUniversityName(e.target.value)}
+                placeholder="e.g. BIT Mesra, IIT Dhanbad, or custom university..."
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Industry / Company Profile Selector */}
+        {role === 'company' && (
+          <div className="card" style={{ background: 'var(--bg)', padding: '1.25rem', marginBottom: '1.25rem', border: '1px solid var(--border)' }}>
+            <div className="row between" style={{ marginBottom: '0.75rem' }}>
+              <span className="text-sm" style={{ fontWeight: 600 }}>Industry Partner Profile</span>
+              <span className="pill teal text-sm">{companyName || 'Tata CleanTech'}</span>
+            </div>
+
+            <p className="muted text-sm" style={{ marginBottom: '0.75rem' }}>
+              Quick select a corporate partner for testing or type a custom company name below:
+            </p>
+
+            <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
+              {defaultCompanies.map(c => (
+                <button
+                  key={c}
+                  type="button"
+                  className={`pill ${companyName === c ? 'teal' : 'grey'}`}
+                  style={{ cursor: 'pointer', border: 'none' }}
+                  onClick={() => handleQuickCoSelect(c)}
+                >
+                  {companyName === c ? `✓ ${c}` : c}
+                </button>
+              ))}
+            </div>
+
+            <div className="form-field" style={{ marginBottom: 0 }}>
+              <label htmlFor="login-co-custom" style={{ fontSize: '0.85rem', fontWeight: 600 }}>Industry Partner / Enterprise Name (Editable)</label>
+              <input
+                id="login-co-custom"
+                type="text"
+                className="input"
+                value={companyName}
+                onChange={e => setCompanyName(e.target.value)}
+                placeholder="e.g. Tata CleanTech, L&T Infra, or custom company..."
+              />
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="card" style={{ background: 'color-mix(in srgb, var(--danger) 10%, var(--surface))', borderColor: 'var(--danger)', padding: '0.75rem', marginBottom: '1rem' }}>
@@ -2355,12 +2818,12 @@ export function Login() {
         )}
 
         <div className="form-field">
-          <label htmlFor="login-email">Email Address</label>
+          <label htmlFor="login-email">Account Email Address</label>
           <input
             id="login-email"
             type="email"
             className="input"
-            placeholder="name@domain.gov.in"
+            placeholder={role === 'university' ? 'research@university.edu.in' : role === 'company' ? 'contact@cleantech.com' : 'name@domain.gov.in'}
             value={email}
             onChange={e => setEmail(e.target.value)}
           />
@@ -2387,8 +2850,12 @@ export function Login() {
           </div>
         </div>
 
-        <button type="submit" className="btn" style={{ width: '100%', marginTop: '0.5rem' }}>
-          Sign In to Portal
+        <button type="submit" className="btn accent" style={{ width: '100%', marginTop: '0.5rem', padding: '0.75rem' }}>
+          {role === 'university'
+            ? `Sign In as ${universityName || 'University'} Research Lab`
+            : role === 'company'
+            ? `Sign In as ${companyName || 'Industry Partner'}`
+            : 'Sign In as Citizen'}
         </button>
 
         <p className="muted text-sm" style={{ textAlign: 'center', marginTop: '1.25rem', marginBottom: 0 }}>

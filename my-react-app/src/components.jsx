@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useNavigate, Navigate } from 'react-router-dom';
 import {
   Check,
   Circle,
@@ -451,14 +451,13 @@ export function Chrome() {
             <button className="util-btn" onClick={toggleLang} lang={lang === 'en' ? 'hi' : 'en'}>
               {lang === 'en' ? 'हिन्दी' : 'English'}
             </button>
-            {user ? (
-              <button className="util-btn" onClick={handleLogout} style={{ fontWeight: 600 }}>
-                Logout ({user.name || user.email})
+            <Link className="util-link" to="/login" style={{ fontWeight: 600 }}>
+              {user ? `Switch Account (${user.institutionName || user.name})` : t.login}
+            </Link>
+            {user && (
+              <button className="util-btn" onClick={handleLogout} style={{ opacity: 0.85 }}>
+                Logout
               </button>
-            ) : (
-              <Link className="util-link" to="/login">
-                {t.login}
-              </Link>
             )}
           </div>
         </div>
@@ -484,11 +483,9 @@ export function Chrome() {
           </nav>
 
           <div className="row" style={{ gap: '0.75rem' }}>
-            {!user && (
-              <Link className="btn ghost sm" to="/login">
-                {t.login}
-              </Link>
-            )}
+            <Link className="btn ghost sm" to="/login">
+              {user ? `Portal: ${user.institutionName || user.name}` : t.login}
+            </Link>
             <Link className="btn accent" to="/submit">
               + {t.submitCta}
             </Link>
@@ -530,10 +527,16 @@ export function Chrome() {
 }
 
 export function PortalShell({ role }) {
+  const navigate = useNavigate();
   const isUni = role === 'university';
   const label = isUni ? 'University Research Portal' : 'Industry Partner Portal';
   const roleCls = isUni ? 'university' : 'industry';
   const Icon = isUni ? Landmark : Building2;
+  const user = getCurrentUser();
+
+  const activeInstName = isUni
+    ? (user?.role === 'university' && user?.institutionName ? user.institutionName : (localStorage.getItem('selectedUniversity') || 'BIT Mesra'))
+    : (user?.role === 'company' && user?.institutionName ? user.institutionName : (localStorage.getItem('selectedCompany') || 'Tata CleanTech Innovations'));
 
   const uniNav = [
     { to: '/university', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -553,15 +556,40 @@ export function PortalShell({ role }) {
 
   const items = isUni ? uniNav : compNav;
 
+  const handleLogout = () => {
+    logoutUser();
+    navigate(`/login?role=${role}`);
+  };
+
   return (
     <div className="portal-shell">
       <aside className="portal-sidebar" aria-label={label}>
-        <div className="row" style={{ padding: '0.25rem 0.5rem 0.75rem', borderBottom: '1px solid var(--border)', marginBottom: '0.5rem' }}>
-          <span className={`role-chip ${roleCls}`}>
-            <Icon size={14} aria-hidden="true" />
-            {role}
-          </span>
+        {/* Inside-Page Profile & Logout Header Card */}
+        <div className="col" style={{ padding: '0.75rem', background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--border)', marginBottom: '1rem', gap: '0.4rem' }}>
+          <div className="row between">
+            <span className={`role-chip ${roleCls}`}>
+              <Icon size={14} aria-hidden="true" />
+              {isUni ? 'University' : 'Industry'}
+            </span>
+          </div>
+          <div style={{ fontWeight: 600, fontSize: '0.9375rem', color: 'var(--text)', marginTop: '0.15rem' }}>
+            {activeInstName}
+          </div>
+          <div className="row" style={{ gap: '0.4rem', marginTop: '0.35rem' }}>
+            <Link to={`/login?role=${role}`} className="btn ghost sm" style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', flex: 1, textAlign: 'center' }}>
+              Switch Profile
+            </Link>
+            <button
+              type="button"
+              className="btn ghost sm danger"
+              style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}
+              onClick={handleLogout}
+            >
+              Logout
+            </button>
+          </div>
         </div>
+
         {items.map(nav => {
           const NavIcon = nav.icon;
           return (
